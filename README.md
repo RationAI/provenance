@@ -109,6 +109,8 @@ Lightning without mlkit? Install the `lightning` extra
 `rationai.provenance.lightning` (`ProvenanceCallback`, `DatasetVerificationCallback`,
 `EnvironmentCallback`) to your trainer directly.
 
+A complete runnable version of the pattern above: `examples/example_provenance_train.py`.
+
 ## What lands in MLflow per run
 
 | Where | What |

@@ -3,7 +3,6 @@ seed: 42
 num_classes: 2
 lr: 0.001
 batch_size: 4
-epochs: 2
 
 # Optional user override (falls back to MLFLOW_USER env var)
 user:
@@ -14,3 +13,14 @@ logger:
   experiment_name: example_provenance_train
   tracking_uri: http://localhost:5000
   run_name: null
+
+# Trainer and its callbacks — instantiated by hydra.utils.instantiate,
+# so the provenance callback is configured entirely from this file.
+trainer:
+  accelerator: cpu
+  max_epochs: 2
+  log_every_n_steps: 5
+  callbacks:
+    - _target_: rationai.mlkit.lightning.callbacks.ProvenanceCallback
+      model_name: example_simple_net
+      fail_fast: false

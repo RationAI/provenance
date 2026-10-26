@@ -26,8 +26,6 @@ from omegaconf import DictConfig
 from rationai.mlkit import Trainer, autolog
 from torch.utils.data import DataLoader
 
-from rationai.provenance.lightning import ProvenanceCallback
-
 
 if TYPE_CHECKING:
     from rationai.mlkit.lightning.loggers.mlflow import MLFlowLogger
@@ -143,16 +141,9 @@ def main(config: DictConfig, logger: MLFlowLogger) -> None:
     model = SimpleNet(num_classes=config.num_classes, lr=config.lr)
     data = ExampleDataModule(batch_size=config.batch_size)
 
-    # Build trainer with provenance callback
-    trainer = Trainer(
-        callbacks=[
-            ProvenanceCallback(model_name="example_simple_net", fail_fast=False),
-        ],
-        logger=logger,
-        max_epochs=config.epochs,
-        accelerator="cpu",
-        log_every_n_steps=5,
-    )
+    # Trainer *and its callbacks* come from the hydra config — nothing
+    # provenance-related is hardcoded here (see example_provenance_train_cfg.yaml).
+    trainer = hydra.utils.instantiate(config.trainer, _target_=Trainer, logger=logger)
 
     trainer.fit(model, datamodule=data)
 
