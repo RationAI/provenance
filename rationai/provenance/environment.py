@@ -248,7 +248,6 @@ _JOB_ENV_KEYS = (
     "shm",
     "cluster",
     "gpu",
-    "gpu_count",
 )
 
 
