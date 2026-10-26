@@ -274,7 +274,9 @@ def register_dataset(
             file_mtimes[basename] = -1
 
     mlflow.set_experiment(experiment_name)
-    run = mlflow.start_run(run_name=f"Dataset_{dataset_name}_{version}")
+    run = mlflow.start_run(
+        run_name=f"Dataset_{dataset_name}_{version}", nested=True
+    )  # nested: usable inside an active @autolog run
     run_id = run.info.run_id
     run_active = True
 

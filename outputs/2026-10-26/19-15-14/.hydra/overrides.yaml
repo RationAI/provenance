@@ -1,0 +1,1 @@
+- logger.tracking_uri=sqlite:////tmp/mlflow_ex.db

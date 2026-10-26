@@ -1,0 +1,124 @@
+{
+  "model_name": "example_simple_net",
+  "params": {
+    "dataset_verified": "True",
+    "dataset_file_sizes_match": "True",
+    "dataset_files_missing": "0",
+    "dataset_files_total": "10",
+    "train_samples": "8",
+    "test_samples": "2",
+    "train_positive": "4",
+    "train_negative": "4",
+    "test_positive": "1",
+    "test_negative": "1",
+    "model_name": "example_simple_net",
+    "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
+    "gpu_count": "1",
+    "gpu_compute_capability": "12.0",
+    "cuda_version": "13.0",
+    "gpu_driver_version": "615.78.08",
+    "os_platform": "Linux-7.2.11-arch1-1-x86_64-with-glibc2.44",
+    "python_version": "3.12.12",
+    "memory_limit_gib": "unlimited",
+    "torch_version": "2.14.1+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn_version": "92400",
+    "cudnn_enabled": "True",
+    "split_test_size": "0.2",
+    "split_random_state": "42",
+    "split_stratified": "True",
+    "num_classes": "2",
+    "lr": "0.001",
+    "total_parameters": "1573250",
+    "trainable_parameters": "1573250",
+    "layer_summary": "net(Sequential): params=0, children=4\nnet.0(Flatten): params=0, children=0\nnet.1(Linear): params=1572992, children=0\nnet.2(ReLU): params=0, children=0\nnet.3(Linear): params=258, children=0",
+    "model_class": "SimpleNet",
+    "optimizer_type": "Adam",
+    "opt_lr": "0.001",
+    "opt_eps": "1e-08",
+    "opt_weight_decay": "0",
+    "opt_amsgrad": "False",
+    "opt_maximize": "False",
+    "opt_capturable": "False",
+    "opt_differentiable": "False",
+    "opt_decoupled_weight_decay": "False"
+  },
+  "metrics": {},
+  "tags": {
+    "git.repo_url": "git@github.com:RationAI/provenance.git",
+    "git.branch": "master",
+    "dataset_verification": "VERIFIED",
+    "user_run_id": "700a87375f5746599a2302d5f591611f",
+    "username": "jiribuchta",
+    "organization": "RationAI",
+    "dataset_run_id": "78654e374c054cc78b29063d0380b3c6",
+    "prov_start_time": "2026-10-26T18:15:15.266073+00:00",
+    "seed_seed": "unset",
+    "seed_random_state": "478163327"
+  },
+  "run_id": "df172c66e66e43fd856e8eef7eb913ee",
+  "experiment_name": "Training_Pipeline",
+  "split": {
+    "source": "manifest_split",
+    "test_size": 0.2,
+    "random_state": 42,
+    "stratified": true,
+    "train_count": 8,
+    "test_count": 2,
+    "train": [
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_007.png",
+        "label": 1
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_008.png",
+        "label": 0
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_002.png",
+        "label": 0
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_000.png",
+        "label": 0
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_003.png",
+        "label": 1
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_001.png",
+        "label": 1
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_005.png",
+        "label": 1
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_004.png",
+        "label": 0
+      }
+    ],
+    "test": [
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_006.png",
+        "label": 0
+      },
+      {
+        "path": "/home/novby/Documents/rationAI/provenance/data/example_dataset/slide_009.png",
+        "label": 1
+      }
+    ]
+  },
+  "dataset_verification": {
+    "verified": true,
+    "dataset_run_id": "78654e374c054cc78b29063d0380b3c6",
+    "file_sizes_match": true,
+    "files_missing": 0,
+    "files_total": 10,
+    "details": [
+      "\u2705 Dataset verified \u2014 matches registered version"
+    ]
+  },
+  "requirements": "Flask==3.1.3\nGitPython==3.2.1\nImageIO==2.38.1\nJinja2==3.1.6\nMako==1.4.3\nMarkupSafe==3.0.4\nPyYAML==6.0.3\nPygments==2.21.0\nSQLAlchemy==2.1.6\nWerkzeug==3.1.9\naffine==3.0.1\naiohappyeyeballs==2.7.1\naiohttp-retry==2.9.1\naiohttp==3.14.5\naiosignal==1.4.0\nalbucore==0.2.21\nalbumentationsx==2.5.1\nalembic==1.20.1\nannotated-doc==0.0.5\nannotated-types==0.8.0\nantlr4-python3-runtime==4.9.3\nanyio==4.15.1\nast_serialize==0.13.1\nasttokens==3.0.2\nattrs==26.1.0\nblinker==1.9.0\ncachetools==7.2.5\ncertifi==2026.10.23\ncffi==2.1.1\ncharset-normalizer==3.5.2\nclick==8.5.0\ncloudpickle==3.1.2\ncomm==0.2.3\ncontourpy==1.4.0\ncryptography==50.0.2\ncuda-bindings==13.4.4\ncuda-pathfinder==1.8.4\ncuda-toolkit==13.0.3.0\ncycler==0.12.1\ndatabricks-sdk==0.157.0\ndatasets==5.1.0\ndebugpy==1.8.22\ndill==0.4.1\ndocker==7.2.0\ndonfig==0.8.1.post1\ndurationpy==0.11\net_xmlfile==2.0.0\nexecuting==2.3.0\nfastapi==0.162.0\nfilelock==4.2.4\nflask-cors==6.0.5\nfonttools==4.67.0\nfrozenlist==1.8.0\nfsspec==2026.7.0\ngeopandas==1.2.0\ngitdb==4.0.12\ngoogle-auth==2.62.0\ngoogle-crc32c==1.9.0\ngraphene==3.4.3\ngraphql-core==3.2.13\ngraphql-relay==3.2.0\ngunicorn==26.2.0\nh11==0.16.0\nhf-xet==1.7.0\nhttpcore2==2.16.0\nhttpcore==1.0.9\nhttpx2==2.16.0\nhttpx==0.28.1\nhuey==3.5.3\nhuggingface_hub==2.3.0\nhumanfriendly==10.0\nhydra-core==1.3.8\nidna==3.20\nimagecodecs==2026.10.10\nimportlib_metadata==9.1.0\nipykernel==7.4.0\nipython==9.17.1\nipython_pygments_lexers==1.1.1\nitsdangerous==2.2.0\njedi==0.20.1\njoblib==1.6.0\njsonschema-specifications==2025.9.1\njsonschema==4.26.0\njupyter_client==8.10.0\njupyter_core==5.9.1\nkiwisolver==1.5.1\nkubernetes==37.0.1\nlazy-loader==0.6\nlibrt==0.16.0\nlightning-utilities==0.15.3\nlightning==2.6.6\nlz4==4.4.5\nmatplotlib-inline==0.2.2\nmatplotlib==3.11.2\nmlflow-skinny==3.17.2\nmlflow-tracing==3.17.2\nmlflow==3.17.2\nmpmath==1.3.0\nmsgpack==1.2.3\nmsgspec==0.22.0\nmultidict==7.2.1\nmultiprocess==0.70.19\nmypy==2.4.0\nmypy_extensions==1.1.0\nnarwhals==2.27.1\nnest-asyncio2==1.7.4\nnetworkx==3.7\nnumcodecs==0.17.1\nnumkong==7.8.6\nnumpy==2.5.4\nnvidia-cublas==13.1.1.3\nnvidia-cuda-cupti==13.0.85\nnvidia-cuda-nvrtc==13.0.88\nnvidia-cuda-runtime==13.0.96\nnvidia-cudnn-cu13==9.24.0.43\nnvidia-cufft==12.0.0.61\nnvidia-cufile==1.15.1.6\nnvidia-curand==10.4.0.35\nnvidia-cusolver==12.0.4.66\nnvidia-cusparse==12.6.3.3\nnvidia-cusparselt-cu13==0.8.1\nnvidia-nccl-cu13==2.30.7\nnvidia-nvjitlink==13.4.92\nnvidia-nvshmem-cu13==3.4.5\nnvidia-nvtx==13.0.85\noauthlib==4.0.0\nomegaconf==2.3.1\nopenpyxl==3.1.5\nopenslide-python==1.4.7\nopentelemetry-api==1.45.1\nopentelemetry-proto==1.45.1\nopentelemetry-sdk==1.45.1\nopentelemetry-semantic-conventions==0.66b1\npackaging==26.3\npandas==3.1.0\nparso==0.8.7\npathspec==1.1.1\npexpect==4.9.0\npillow==13.0.0\nplatformdirs==4.13.5\nprettytable==3.18.0\nprompt_toolkit==3.0.53\npropcache==0.5.4\nprotobuf==7.36.2\npsutil==7.2.2\nptyprocess==0.7.0\npure_eval==0.2.4\npyarrow==25.0.1\npyasn1==0.6.4\npyasn1_modules==0.4.2\npycparser==3.12\npydantic==2.14.1\npydantic_core==2.50.1\npyogrio==0.13.0\npyparsing==3.3.3\npyproj==3.8.0\npython-dateutil==2.9.0.post0\npython-dotenv==1.2.4\npytorch-lightning==2.6.6\npyvips==3.2.0\npyzmq==27.2.0\nrasterio==1.5.2\nrationai-kube-jobs==0.4.0\nrationai-masks==1.1.1\nrationai-mlkit==0.4.1\nrationai-provenance==0.1.0\nrationai-sdk==0.1.0\nratiopath==1.5.0\nray==2.59.0\nreferencing==0.37.0\nrequests-oauthlib==2.0.0\nrequests==2.34.2\nrpds-py==2026.9.1\nruff==0.17.2\nscikit-image==0.26.0\nscikit-learn==1.9.1\nscipy==1.18.1\nsetuptools==84.2.1\nshapely==2.2.0\nsix==1.17.0\nskops==0.16.0\nsmmap==5.0.3\nsqlparse==0.6.0\nstack-data==0.6.3\nstarlette==1.10.0\nstringzilla==5.3.2\nsympy==1.14.0\ntenacity==9.2.1\nthreadpoolctl==3.7.0\ntifffile==2026.10.15\ntorch==2.14.1\ntorchmetrics==1.9.0\ntornado==6.6\ntqdm==4.70.1\ntraitlets==5.16.1\ntriton==3.8.0\ntruststore==0.10.5\ntyping-inspection==0.4.4\ntyping_extensions==4.16.0\nurllib3==2.8.0\nuvicorn==0.54.0\nwcwidth==0.9.4\nwebsocket-client==1.9.2\nxxhash==4.0.2\nyarl==1.25.1\nzarr==3.4.1\nzipp==4.1.2\n"
+}

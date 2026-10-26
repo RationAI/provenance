@@ -1,0 +1,26 @@
+Seed set to 42
+[2026-10-26 19:15:14,995][pytorch_lightning.utilities.rank_zero][INFO] - GPU available: True (cuda), used: False
+[2026-10-26 19:15:14,997][pytorch_lightning.utilities.rank_zero][INFO] - TPU available: False, using: 0 TPU cores
+/home/novby/Documents/rationAI/ulcerative-colitis-dysplasia/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/setup.py:175: GPU available but not used. You can set it by doing `Trainer(accelerator='gpu')`.
+[2026-10-26 19:15:14,999][pytorch_lightning.utilities.rank_zero][INFO] - 💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+[2026-10-26 19:15:15,000][pytorch_lightning.utilities.rank_zero][INFO] - 💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+/home/novby/Documents/rationAI/ulcerative-colitis-dysplasia/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/configuration_validator.py:68: You passed in a `val_dataloader` but have no `validation_step`. Skipping val loop.
+[2026-10-26 19:15:15,165][rationai.mlkit.lightning.callbacks.provenance][INFO] -   [ProvenanceCallback] ✅ Dataset verified — matches registered version
+
+  | Name | Type       | Params | Mode  | FLOPs
+----------------------------------------------------
+0 | net  | Sequential | 1.6 M  | train | 0    
+----------------------------------------------------
+1.6 M     Trainable params
+0         Non-trainable params
+1.6 M     Total params
+6.293     Total estimated model params size (MB)
+5         Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+/home/novby/Documents/rationAI/ulcerative-colitis-dysplasia/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+/home/novby/Documents/rationAI/ulcerative-colitis-dysplasia/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/connectors/data_connector.py:434: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=11` in the `DataLoader` to improve performance.
+/home/novby/Documents/rationAI/ulcerative-colitis-dysplasia/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/fit_loop.py:321: The number of training batches (2) is smaller than the logging interval Trainer(log_every_n_steps=5). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
+Epoch 1: 100%|██████████| 2/2 [00:00<00:00, 118.14it/s, v_num=13ee, train_loss=5.96e-8][2026-10-26 19:15:15,605][pytorch_lightning.utilities.rank_zero][INFO] - `Trainer.fit` stopped: `max_epochs=2` reached.
+Epoch 1: 100%|██████████| 2/2 [00:00<00:00, 36.61it/s, v_num=13ee, train_loss=5.96e-8] 
+[2026-10-26 19:15:15,619][rationai.mlkit.lightning.callbacks.provenance][INFO] - [ProvenanceCallback] Complete → df172c66e66e43fd856e8eef7eb913ee

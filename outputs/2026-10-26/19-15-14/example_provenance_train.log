@@ -1,0 +1,7 @@
+[2026-10-26 19:15:14,995][pytorch_lightning.utilities.rank_zero][INFO] - GPU available: True (cuda), used: False
+[2026-10-26 19:15:14,997][pytorch_lightning.utilities.rank_zero][INFO] - TPU available: False, using: 0 TPU cores
+[2026-10-26 19:15:14,999][pytorch_lightning.utilities.rank_zero][INFO] - 💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+[2026-10-26 19:15:15,000][pytorch_lightning.utilities.rank_zero][INFO] - 💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+[2026-10-26 19:15:15,165][rationai.mlkit.lightning.callbacks.provenance][INFO] -   [ProvenanceCallback] ✅ Dataset verified — matches registered version
+[2026-10-26 19:15:15,605][pytorch_lightning.utilities.rank_zero][INFO] - `Trainer.fit` stopped: `max_epochs=2` reached.
+[2026-10-26 19:15:15,619][rationai.mlkit.lightning.callbacks.provenance][INFO] - [ProvenanceCallback] Complete → df172c66e66e43fd856e8eef7eb913ee

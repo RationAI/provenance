@@ -1,0 +1,41 @@
+[project]
+name = "rationai-provenance"
+version = "0.1.0"
+description = "Ingredient logging for MLflow runs: user and dataset registries, environment snapshots, split/manifest logging. PROV-O documents are built by an external tool."
+authors = [
+  { name = "Matěj Pekár", email = "matejpekar@mail.muni.cz" },
+  { name = "Jakub Pekár", email = "jakubpekar@mail.muni.cz" },
+  { name = "Adam Kukučka", email = "adamkukucka@mail.muni.cz" },
+]
+requires-python = ">=3.12,<3.14"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+  "mlflow>=3.10.1",
+  "omegaconf>=2.3",
+  "pandas>=2.2",
+]
+
+[project.optional-dependencies]
+# Lightning callbacks (ProvenanceCallback etc.). Pulls in mlkit for MLFlowLogger;
+# the core above stays usable without any of this.
+lightning = [
+  "lightning>=2.6.0",
+  "scikit-learn>=1.6.0",
+  "rationai-mlkit @ git+https://gitlab.ics.muni.cz/rationai/digital-pathology/libraries/mlkit.git",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff==0.14.6"]  # match mlkit's pinned ruff so both repos lint identically
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["rationai*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
