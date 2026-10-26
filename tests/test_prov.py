@@ -63,3 +63,22 @@ def test_detect_job_limits(monkeypatch):
         "memory_limit": "8Gi",
         "user": "jdoe",
     }
+
+
+def test_config_to_container_resolves_interpolations():
+    from omegaconf import OmegaConf
+
+    from rationai.provenance.log_provenance import _config_to_container
+
+    cfg = OmegaConf.create({"a": {"name": "x"}, "b": "${a.name}"})
+    assert _config_to_container(cfg)["b"] == "x"
+
+
+def test_config_to_container_survives_dangling_interpolation():
+    from omegaconf import OmegaConf
+
+    from rationai.provenance.log_provenance import _config_to_container
+
+    cfg = OmegaConf.structured({"a": {"name": "x"}, "b": "${a.missing}"})
+    result = _config_to_container(cfg)  # must not crash
+    assert "b" in result

@@ -114,7 +114,12 @@ def _config_to_container(config: Any) -> dict[str, Any]:
     if config is None:
         return {}
     if isinstance(config, DictConfig):
-        container = OmegaConf.to_container(config, resolve=False)
+        try:
+            # Resolve interpolations (${...}) so logged params show real values;
+            # fall back to raw strings if any reference is dangling (never crash).
+            container = OmegaConf.to_container(config, resolve=True)
+        except Exception:
+            container = OmegaConf.to_container(config, resolve=False)
         if isinstance(container, dict):
             return cast("dict[str, Any]", container)
         return {}
