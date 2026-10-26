@@ -39,3 +39,27 @@ def test_safe_id():
 
     assert safe_id("hello world") == "hello_world"
     assert safe_id("a/b:c") == "a_b_c"
+
+
+def test_detect_job_limits(monkeypatch):
+    from rationai.provenance.environment import detect_job_limits
+
+    for key in (
+        "RATIONAI_JOB_CPU_LIMIT",
+        "RATIONAI_JOB_MEMORY_LIMIT",
+        "RATIONAI_JOB_USER",
+        "RATIONAI_JOB_NAME",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    assert detect_job_limits() == {}
+
+    monkeypatch.setenv("RATIONAI_JOB_CPU_LIMIT", "4")
+    monkeypatch.setenv("RATIONAI_JOB_MEMORY_LIMIT", "8Gi")
+    monkeypatch.setenv("RATIONAI_JOB_USER", "jdoe")
+
+    assert detect_job_limits() == {
+        "cpu_limit": "4",
+        "memory_limit": "8Gi",
+        "user": "jdoe",
+    }

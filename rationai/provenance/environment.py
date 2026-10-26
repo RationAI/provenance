@@ -42,10 +42,11 @@ def lookup_user_run() -> tuple[str | None, dict[str, str]]:
 
     from rationai.provenance.dataset import lookup_experiment
 
-    username = os.environ.get("MLFLOW_USER")
+    # Set by kube-jobs (RATIONAI_JOB_USER) or manually for local runs.
+    username = os.environ.get("RATIONAI_JOB_USER") or os.environ.get("MLFLOW_USER")
     if not username:
         raise RuntimeError(
-            "MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running."
+            "RATIONAI_JOB_USER / MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running."
         )
 
     exp_id = lookup_experiment("User_Registry")
@@ -232,6 +233,39 @@ def detect_seeds() -> dict[str, str]:
 
 
 # ──────────────────────────────────────────────
+# Job scheduler metadata (kube-jobs RATIONAI_JOB_* env vars)
+# ──────────────────────────────────────────────
+
+# Keys injected by kube-jobs' submit_job; suffix lowercased here.
+_JOB_ENV_KEYS = (
+    "name",
+    "user",
+    "image",
+    "cpu_request",
+    "cpu_limit",
+    "memory_request",
+    "memory_limit",
+    "shm",
+    "cluster",
+    "gpu",
+    "gpu_count",
+)
+
+
+def detect_job_limits() -> dict[str, str]:
+    """Read RATIONAI_JOB_* metadata set by the job scheduler, if any.
+
+    Returns what the job *requested* (cpu/memory/gpu limits, image,
+    cluster, user). Empty dict when not running under kube-jobs.
+    """
+    return {
+        key: value
+        for key in _JOB_ENV_KEYS
+        if (value := os.environ.get(f"RATIONAI_JOB_{key.upper()}")) is not None
+    }
+
+
+# ──────────────────────────────────────────────
 # Environment snapshot
 # ──────────────────────────────────────────────
 
@@ -352,6 +386,9 @@ def _detect_all_sections(
         strict,
     )
     result["seeds"] = _attempt("Seed detection", detect_seeds, {}, strict)
+    result["job_limits"] = _attempt(
+        "Job metadata detection", detect_job_limits, {}, strict
+    )
     result["image_libraries"] = _attempt(
         "Image library detection", detect_image_libraries, {}, strict
     )
@@ -394,6 +431,10 @@ def _log_env_params(result: dict[str, Any]) -> None:
     seeds = result.get("seeds") or {}
     if seeds:
         mlflow.set_tags({f"seed_{k}": str(v) for k, v in seeds.items()})
+
+    job_limits = result.get("job_limits") or {}
+    if job_limits:
+        mlflow.set_tags({f"job_{k}": str(v) for k, v in job_limits.items()})
 
 
 def _log_env_snapshot(strict: bool) -> str | None:

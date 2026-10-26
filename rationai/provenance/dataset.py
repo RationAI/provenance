@@ -308,13 +308,3 @@ def register_dataset(
 
     print(f"  [register_dataset] {dataset_name} v{version} → run_id={run_id}")
     return run_id
-
-
-# ──────────────────────────────────────────────
-# Backward-compatible private aliases (pre-0.5 names)
-# ──────────────────────────────────────────────
-
-_detect_manifest = detect_manifest
-_lookup_experiment = lookup_experiment
-_lookup_dataset_run = lookup_dataset_run
-_verify_dataset = verify_manifest
