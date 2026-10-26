@@ -286,7 +286,7 @@ def log_provenance(
         extra: Extra key/value pairs for the PROV metadata bundle.
 
     Returns:
-        Dict with the computed stats and the PROV document.
+        Dict with the computed stats and tags.
     """
     active_run = mlflow.active_run()
     if active_run is None:
