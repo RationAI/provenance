@@ -73,13 +73,49 @@ OmegaConf/DictConfig or plain dict — your whole config is flattened into
 `cfg_*` params (interpolations resolved). If you have a `train_df`, pass
 `output=train_df` to also log split stats and frame manifests.
 
+## Lightning + Hydra apps
+
+If your repo uses [rationai-mlkit](https://github.com/RationAI/mlkit) (the standard
+RationAI training stack), everything above is automatic — two additions:
+
+**1. Decorate your hydra main** (creates the MLflow run, logs config, hyperparams
+and console stream):
+
+```python
+from rationai.mlkit import Trainer, autolog
+from rationai.mlkit.lightning.loggers import MLFlowLogger
+
+@hydra.main(config_path="../configs", config_name="project_name")
+@autolog
+def main(config: DictConfig, logger: MLFlowLogger) -> None:
+    ...
+    trainer = hydra.utils.instantiate(config.trainer, _target_=Trainer, logger=logger)
+    trainer.fit(model, datamodule=data)
+```
+
+**2. Add the callback to your trainer config** (verifies the dataset, snapshots
+the environment, writes `run_summary.json`; `fail_fast: true` aborts training if
+verification fails):
+
+```yaml
+trainer:
+  callbacks:
+    - _target_: rationai.mlkit.lightning.callbacks.ProvenanceCallback
+      fail_fast: true
+```
+
+Lightning without mlkit? Install the `lightning` extra
+(`uv add 'rationai-provenance[lightning]'`) and add the callbacks from
+`rationai.provenance.lightning` (`ProvenanceCallback`, `DatasetVerificationCallback`,
+`EnvironmentCallback`) to your trainer directly.
+
 ## What lands in MLflow per run
 
 | Where | What |
 | --- | --- |
 | tags | user + dataset run links, git commit, docker image, hardware, seeds, `job_*` (CPU/memory/GPU limits, cluster) |
 | params | your whole config (`cfg_*`), dataset verification counts |
-| artifacts | `requirements_frozen.txt`, split CSVs, frame manifests |
+| artifacts | `requirements_frozen.txt`, split CSVs, frame manifests, `run_summary.json` |
 
 Inside [kube-jobs](https://gitlab.ics.muni.cz/rationai/infrastructure/kube-jobs),
 the `job_*` tags are picked up automatically from the injected `JOB_*` env vars.
