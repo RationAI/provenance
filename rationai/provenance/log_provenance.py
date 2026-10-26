@@ -94,32 +94,41 @@ def _select_any(config: Any, paths: tuple[str, ...]) -> Any:
     return None
 
 
-def _flatten_scalars(node: Any, prefix: str, out: dict[str, str]) -> None:
-    """Flatten config leaves into ``key.subkey: str(value)`` scalar params."""
+def _flatten_scalars(node: Any, prefix: str, out: dict[str, str], cnode: Any = None) -> None:
+    """Flatten config leaves into ``key.subkey: str(value)`` scalar params.
+
+    ``cnode`` is the matching ``DictConfig`` subtree: when present, each leaf is
+    read through it so OmegaConf resolves interpolations (per leaf — a dangling
+    reference only leaves that leaf raw instead of reverting the whole config).
+    """
     if len(out) >= _MAX_PARAMS:
         return
     if isinstance(node, dict):
         for key, value in node.items():
-            _flatten_scalars(value, f"{prefix}.{key}" if prefix else str(key), out)
+            child = None
+            if cnode is not None:
+                try:
+                    child = cnode[str(key)]
+                except Exception:  # dangling interpolation/missing: keep raw
+                    child = None
+            _flatten_scalars(value, f"{prefix}.{key}" if prefix else str(key), out, child)
     elif isinstance(node, (list, tuple)):
         if len(node) <= 5 and all(not isinstance(v, (dict, list, tuple)) for v in node):
             out[prefix] = json.dumps([str(v) for v in node])
     elif node is None:
         out[prefix] = "null"
     else:
-        out[prefix] = str(node)
+        # scalars only: an interpolation resolving to a dict/list keeps its raw string
+        resolved = cnode if isinstance(cnode, (str, int, float)) else node
+        out[prefix] = str(resolved)
 
 
 def _config_to_container(config: Any) -> dict[str, Any]:
     if config is None:
         return {}
     if isinstance(config, DictConfig):
-        try:
-            # Resolve interpolations (${...}) so logged params show real values;
-            # fall back to raw strings if any reference is dangling (never crash).
-            container = OmegaConf.to_container(config, resolve=True)
-        except Exception:
-            container = OmegaConf.to_container(config, resolve=False)
+        # raw strings: interpolation resolution happens per leaf in _flatten_scalars
+        container = OmegaConf.to_container(config, resolve=False)
         if isinstance(container, dict):
             return cast("dict[str, Any]", container)
         return {}
@@ -322,7 +331,7 @@ def log_provenance(
     container = _config_to_container(config)
     if container:
         flat: dict[str, str] = {}
-        _flatten_scalars(container, "", flat)
+        _flatten_scalars(container, "", flat, config if isinstance(config, DictConfig) else None)
         if flat:
             mlflow.log_params(
                 {f"cfg_{safe_id(k)}": v for k, v in list(flat.items())[:_MAX_PARAMS]}

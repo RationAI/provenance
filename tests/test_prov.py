@@ -65,20 +65,27 @@ def test_detect_job_limits(monkeypatch):
     }
 
 
-def test_config_to_container_resolves_interpolations():
+def test_flatten_scalars_resolves_per_leaf():
     from omegaconf import OmegaConf
 
-    from rationai.provenance.log_provenance import _config_to_container
+    from rationai.provenance.log_provenance import (
+        _config_to_container,
+        _flatten_scalars,
+    )
 
-    cfg = OmegaConf.create({"a": {"name": "x"}, "b": "${a.name}"})
-    assert _config_to_container(cfg)["b"] == "x"
+    cfg = OmegaConf.structured(
+        {"a": {"name": "x"}, "good": "${a.name}", "bad": "${a.missing}"}
+    )
+    flat: dict[str, str] = {}
+    _flatten_scalars(_config_to_container(cfg), "", flat, cfg)
+    assert flat["a.name"] == "x"  # plain value
+    assert flat["good"] == "x"  # resolved interpolation
+    assert flat["bad"] == "${a.missing}"  # dangling: raw, does not crash
 
 
-def test_config_to_container_survives_dangling_interpolation():
-    from omegaconf import OmegaConf
+def test_flatten_scalars_without_dictconfig_keeps_raw():
+    from rationai.provenance.log_provenance import _flatten_scalars
 
-    from rationai.provenance.log_provenance import _config_to_container
-
-    cfg = OmegaConf.structured({"a": {"name": "x"}, "b": "${a.missing}"})
-    result = _config_to_container(cfg)  # must not crash
-    assert "b" in result
+    flat: dict[str, str] = {}
+    _flatten_scalars({"a": {"b": "${c}"}}, "", flat)
+    assert flat["a.b"] == "${c}"
