@@ -1,57 +1,97 @@
 # rationai-provenance
 
-Ingredient logging for MLflow runs: **who** ran **what** on **which data**, logged
-to MLflow as params, tags and artifacts so an external tool can build the
-W3C PROV-O documents from these records.
+Records **who** ran **what** on **which data** for every MLflow run — as tags,
+params and artifacts. An external tool then assembles W3C PROV documents from
+these records (this package deliberately does not generate PROV-JSON itself).
 
-This package deliberately does **not** generate PROV-JSON — the provenance
-document is assembled by a separate script from what is logged here.
-
-Framework-agnostic — works with any MLflow run, Lightning or not, pathology or not.
-Extracted from [rationai-mlkit](../mlkit), which now consumes this package and adds the
-Lightning/PyTorch integration on top (`@autolog`, `ProvenanceCallback`, console capture).
-
-## What it does
-
-- **User registry** — `register_new_user` / `lookup_user_run`: register people once, link every run to an agent.
-- **Dataset registry** — `register_dataset` / `lookup_dataset_run`: file sizes, mtimes, manifests, verification.
-- **Environment snapshot** — `capture_environment`: Python packages, hardware (GPU/CPU), docker image, seeds.
-- **Job metadata** — `JOB_*` env vars (set by [kube-jobs](https://gitlab.ics.muni.cz/rationai/infrastructure/kube-jobs)): requested CPU/memory/GPU limits, cluster, user → logged as `job_*` tags.
-- **Run ingredients** — `log_provenance` logs flattened config params, output dataframe stats, frame manifests (CSV artifacts) and upstream input URIs to the active MLflow run.
+Works with any MLflow run — Lightning or not.
 
 ## Install
 
 ```bash
-uv add "rationai-provenance @ git+https://gitlab.ics.muni.cz/rationai/digital-pathology/libraries/provenance.git"
+uv add "rationai-provenance @ git+ssh://git@github.com/RationAI/provenance.git"
 ```
 
-## Usage
+## Setup
+
+Two environment variables (in cluster jobs these are set for you):
+
+```bash
+export MLFLOW_TRACKING_URI=http://your-mlflow-server   # where runs are logged
+export MLFLOW_USER=jdoe                                # your username
+```
+
+## Quick start — 3 steps
+
+### 1. Register yourself (once per person)
+
+```python
+from rationai.provenance import register_new_user
+
+register_new_user(
+    username="jdoe",
+    real_name="Jane Doe",
+    email="jdoe@example.org",
+    organization="RationAI",
+    lead_name="Prof. Lead",
+    lead_email="lead@example.org",
+)
+```
+
+### 2. Register your dataset (once per dataset version)
+
+```python
+from rationai.provenance import register_dataset
+
+register_dataset(dataset_dir="/data/my-dataset", dataset_name="my-dataset", version="1.0.0")
+```
+
+Records every file's size and mtime (plus its manifest, if present) into the
+`Dataset_Registry` MLflow experiment.
+
+### 3. Verify + log in your training script
 
 ```python
 import mlflow
 
-from rationai.provenance import log_provenance
+from rationai.provenance import log_provenance, verify_dataset
+
+verification = verify_dataset(manifest_path="/data/my-dataset/manifest.csv",
+                              data_root="/data/my-dataset")
 
 with mlflow.start_run(run_name="my-experiment"):
-    log_provenance(train_df=df, data_root="data/")  # params, stats, manifests → MLflow
+    log_provenance(config=cfg, name="my-dataset")  # the one call
+    mlflow.set_tags({
+        "dataset_verified": str(verification["verified"]),
+        "dataset_run_id": str(verification["dataset_run_id"]),
+    })
+    # ... your training ...
 ```
 
-For Lightning training, install the `lightning` extra and add the callbacks
-to your trainer (they use mlkit's `MLFlowLogger` under the hood, but the core
-works with any MLflow run):
+`log_provenance` needs an **active MLflow run**. Its `config` argument takes any
+OmegaConf/DictConfig or plain dict — your whole config is flattened into
+`cfg_*` params (interpolations resolved). If you have a `train_df`, pass
+`output=train_df` to also log split stats and frame manifests.
 
-```python
-from rationai.provenance.lightning import ProvenanceCallback
+## What lands in MLflow per run
 
-trainer = Trainer(callbacks=[ProvenanceCallback()], logger=mlflow_logger)
-```
+| Where | What |
+| --- | --- |
+| tags | user + dataset run links, git commit, docker image, hardware, seeds, `job_*` (CPU/memory/GPU limits, cluster) |
+| params | your whole config (`cfg_*`), dataset verification counts |
+| artifacts | `requirements_frozen.txt`, split CSVs, frame manifests |
 
-See `examples/example_provenance_train.py` for a full mlkit integration.
+Inside [kube-jobs](https://gitlab.ics.muni.cz/rationai/infrastructure/kube-jobs),
+the `job_*` tags are picked up automatically from the injected `JOB_*` env vars.
+
+A full end-to-end example (create → register → verify + train, cluster job
+included): [`ulcerative-colitis-dysplasia`](https://github.com/jiribuchta/ulcerative-colitis-dysplasia),
+branch `feature/provenance-demo`, module `provenance_demo.py`.
 
 ## Dependencies
 
-`mlflow`, `pandas`, `omegaconf`. `torch` is optional — GPU details are simply
-omitted from the environment snapshot when it is not installed.
+`mlflow`, `pandas`, `omegaconf`. `torch` is optional — GPU details are omitted
+from the environment snapshot when it is not installed.
 
 ## Development
 
