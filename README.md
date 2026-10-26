@@ -1,6 +1,11 @@
 # rationai-provenance
 
-PROV-O-aware provenance capture for MLflow runs: **who** ran **what** on **which data**.
+Ingredient logging for MLflow runs: **who** ran **what** on **which data**, logged
+to MLflow as params, tags and artifacts so an external tool can build the
+W3C PROV-O documents from these records.
+
+This package deliberately does **not** generate PROV-JSON — the provenance
+document is assembled by a separate script from what is logged here.
 
 Framework-agnostic — works with any MLflow run, Lightning or not, pathology or not.
 Extracted from [rationai-mlkit](../mlkit), which now consumes this package and adds the
@@ -11,7 +16,7 @@ Lightning/PyTorch integration on top (`@autolog`, `ProvenanceCallback`, console 
 - **User registry** — `register_new_user` / `lookup_user_run`: register people once, link every run to an agent.
 - **Dataset registry** — `register_dataset` / `lookup_dataset_run`: file sizes, mtimes, manifests, verification.
 - **Environment snapshot** — `capture_environment`: Python packages, hardware (GPU/CPU), docker image, seeds.
-- **PROV documents** — `log_provenance` attaches a W3C PROV-O JSON document (`prov.json` artifact) to the active MLflow run, covering inputs, outputs, splits, metrics and agents.
+- **Run ingredients** — `log_provenance` logs flattened config params, output dataframe stats, frame manifests (CSV artifacts) and upstream input URIs to the active MLflow run.
 
 ## Install
 
@@ -27,7 +32,7 @@ import mlflow
 from rationai.provenance import log_provenance
 
 with mlflow.start_run(run_name="my-experiment"):
-    log_provenance(train_df=df, data_root="data/")  # prov.json lands in the run's artifacts
+    log_provenance(train_df=df, data_root="data/")  # params, stats, manifests → MLflow
 ```
 
 For Lightning training, install the `lightning` extra and add the callbacks

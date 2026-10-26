@@ -1,15 +1,16 @@
 """Universal provenance logging for any pipeline run.
 
-One entry point — ``log_provenance`` — captures everything that describes a
-run regardless of its type (mask creation, tiling, filtering, embeddings,
-training, inference, …):
+One entry point — ``log_provenance`` — logs everything that describes a run
+to MLflow regardless of its type (mask creation, tiling, filtering,
+embeddings, training, inference, …). The PROV-O document itself is built
+by an external tool from these records.
 
 * environment + hardware + git + seeds (via ``capture_environment``)
 * flattened scalar config leaves as MLflow params
 * output dataframe statistics (+ optional file manifest and label breakdown)
 * upstream inputs (explicit or auto-detected ``mlflow-artifacts:/`` URIs in
   the config) — links preprocessing steps into a chain
-* a self-contained PROV-O JSON document (``provenance/prov.json`` artifact)
+* frame manifests as CSV artifacts
 
 Every argument is optional; the function derives what it can from the
 Hydra config and the active MLflow run.
@@ -29,18 +30,18 @@ import mlflow
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 
-from rationai.provenance.common import (
-    get_prov_prefixes,
-    iso_timestamp,
-    qualified,
-    qualified_name,
-    safe_id,
-    typed_value,
-)
 from rationai.provenance.environment import capture_environment
 
 
 log = logging.getLogger(__name__)
+
+
+def safe_id(name: str) -> str:
+    """Sanitise a name so it works as an MLflow param/tag fragment."""
+    import re as _re
+
+    return _re.sub(r"[^a-zA-Z0-9_]", "_", name)
+
 
 # Columns probed (in order) when looking for file paths / labels.
 _PATH_COLUMN_CANDIDATES = (
@@ -239,179 +240,6 @@ def _frame_stats(
 
 
 # ──────────────────────────────────────────────
-# PROV document builder (generic run)
-# ──────────────────────────────────────────────
-
-
-def _get_run_tags() -> dict[str, str]:
-    """Tags of the active run (empty dict when unavailable)."""
-    try:
-        from mlflow.tracking import MlflowClient
-
-        run = mlflow.active_run()
-        if run is None:
-            return {}
-        client = MlflowClient()
-        return dict(client.get_run(run.info.run_id).data.tags)
-    except Exception:
-        return {}
-
-
-def _input_entity_id(uri: str) -> str:
-    return qualified("gen", safe_id(f"input_{uri}"))
-
-
-def build_run_prov(
-    run_id: str,
-    *,
-    name: str,
-    version: str | None,
-    activity_name: str,
-    stats: dict[str, Any],
-    inputs: list[str],
-    extra_meta: dict[str, Any],
-    frames: list[str] | None = None,
-    prov_prefixes: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Build a generic PROV-O document for an arbitrary pipeline run.
-
-    Structure matches the other builders: agent (from run tags), one run
-    activity, a CPM metadata bundle, output/input entities and the CPM
-    wrapper activity.
-    """
-    prefixes = prov_prefixes or get_prov_prefixes()
-    tags = _get_run_tags()
-
-    username = tags.get("username", tags.get("mlflow.user", "unknown"))
-    real_name = tags.get("real_name", username)
-    organization = tags.get("organization", "")
-
-    agent_id = qualified("gen", safe_id(f"user_{username}"))
-    run_act_id = qualified("gen", safe_id(f"run_{run_id}"))
-    meta_id = qualified("meta", run_id)
-    main_act_id = qualified("blank", f"Run_{run_id[:8]}")
-    version_id = (version or "snapshot").replace(".", "_")
-    output_id = qualified("gen", safe_id(f"output_{name}_{version_id}"))
-
-    # ── AGENT ────────────────────────────────────────────
-    agent_props: dict[str, Any] = {
-        "schema:name": typed_value(real_name),
-        "prov:type": [qualified_name("schema", "Person")],
-    }
-    if organization:
-        agent_props["schema:affiliation"] = typed_value(organization)
-
-    now = iso_timestamp()
-
-    # ── RUN ACTIVITY ─────────────────────────────────────
-    run_activity: dict[str, Any] = {
-        "prov:type": [qualified_name("schema", "Action")],
-        "prov:startTime": [now],
-        "schema:name": typed_value(activity_name),
-        "gen:output_name": typed_value(name),
-    }
-    if version:
-        run_activity["gen:output_version"] = typed_value(version)
-    git_commit = tags.get("git_commit", tags.get("mlflow.source.git.commit", ""))
-    if git_commit:
-        run_activity["schema:identifier"] = typed_value(git_commit)
-
-    # ── OUTPUT ENTITIES (one per frame when several) ─────
-    output_ids: list[str] = [output_id]
-    entities: dict[str, Any] = {}
-    if frames and len(frames) > 1:
-        output_ids = []
-        for frame_name in frames:
-            frame_id = qualified(
-                "gen", safe_id(f"output_{name}_{frame_name}_{version_id}")
-            )
-            entities[frame_id] = {
-                "schema:name": typed_value(f"{name}/{frame_name}"),
-                "prov:type": [qualified_name("sosa", "Sample")],
-                "dct:description": typed_value(
-                    f"Output {frame_name} of {name} v{version or 'snapshot'} of {activity_name}"
-                ),
-                "gen:output_name": typed_value(name),
-                "gen:frame": typed_value(frame_name),
-            }
-            output_ids.append(frame_id)
-    else:
-        entities[output_id] = {
-            "schema:name": typed_value(name),
-            "prov:type": [qualified_name("sosa", "Sample")],
-            "dct:description": typed_value(
-                f"Output {name} v{version or 'snapshot'} of {activity_name}"
-            ),
-        }
-
-    # ── INPUT ENTITIES + USED ────────────────────────────
-    used: dict[str, Any] = {}
-    rel_no = 0
-    for uri in inputs:
-        input_id = _input_entity_id(uri)
-        entities[input_id] = {
-            "schema:name": typed_value(uri),
-            "schema:url": typed_value(uri),
-            "prov:type": [qualified_name("sosa", "Sample")],
-        }
-        used[f"_:n{rel_no}"] = {"prov:activity": run_act_id, "prov:entity": input_id}
-        rel_no += 1
-
-    # ── CPM METADATA ENTITY ──────────────────────────────
-    meta_entity: dict[str, Any] = {
-        "prov:type": [qualified_name("cpm", "BundleMetadata")],
-        "gen:output_name": typed_value(name),
-        "gen:run_name": typed_value(activity_name),
-    }
-    if version:
-        meta_entity["gen:output_version"] = typed_value(version)
-    if organization:
-        meta_entity["cpm:organization"] = typed_value(organization)
-    for key, value in stats.items():
-        meta_entity[f"gen:{safe_id(str(key))}"] = typed_value(value)
-    if inputs:
-        meta_entity["gen:input_uris"] = [json.dumps(sorted(inputs))]
-    for key, value in extra_meta.items():
-        meta_entity[f"gen:{safe_id(str(key))}"] = typed_value(value)
-
-    entities[meta_id] = meta_entity
-
-    # ── CPM MAIN ACTIVITY ────────────────────────────────
-    main_activity: dict[str, Any] = {
-        "prov:type": [qualified_name("cpm", "mainActivity")],
-        "cpm:referencedMetaBundleId": [{"type": "prov:QUALIFIED_NAME", "$": meta_id}],
-        "dct:hasPart": [{"type": "prov:QUALIFIED_NAME", "$": run_act_id}],
-    }
-
-    was_generated_by: dict[str, Any] = {}
-    for i, out_id in enumerate(output_ids):
-        was_generated_by[f"_:n{rel_no + i}"] = {
-            "prov:entity": out_id,
-            "prov:activity": run_act_id,
-        }
-    was_associated_with = {
-        f"_:n{rel_no + len(output_ids)}": {
-            "prov:activity": run_act_id,
-            "prov:agent": agent_id,
-        }
-    }
-
-    inner: dict[str, Any] = {
-        "prefix": prefixes,
-        "entity": entities,
-        "activity": {run_act_id: run_activity, main_act_id: main_activity},
-        "agent": {agent_id: agent_props},
-        "wasAssociatedWith": was_associated_with,
-        "wasGeneratedBy": was_generated_by,
-    }
-    inner["entity"][meta_id] = meta_entity
-    if used:
-        inner["used"] = used
-
-    return {"bundle": {f"storage:{run_id}": inner}}
-
-
-# ──────────────────────────────────────────────
 # Universal provenance entry point
 # ──────────────────────────────────────────────
 
@@ -527,19 +355,6 @@ def log_provenance(
         tags["input_uris"] = json.dumps(input_list)
     mlflow.set_tags(tags)
 
-    # ── PROV document + artifacts ─────────────────────────
-    prov_doc = build_run_prov(
-        run_id,
-        name=name,
-        version=version,
-        activity_name=str(run_name),
-        stats=stats,
-        inputs=input_list,
-        extra_meta=dict(extra or {}),
-        frames=list(frames.keys()) if frames else None,
-        prov_prefixes=None,
-    )
-
     def _log_artifact(local_path: str, artifact_path: str | None = None) -> None:
         if logger is not None:
             logger.log_artifact(local_path, artifact_path=artifact_path)
@@ -550,17 +365,12 @@ def log_provenance(
         prov_dir = Path(tmpdir) / "provenance"
         prov_dir.mkdir(exist_ok=True)
 
-        prov_path = prov_dir / "prov.json"
-        prov_path.write_text(json.dumps(prov_doc, indent=2), encoding="utf-8")
-        _log_artifact(str(prov_path), artifact_path="provenance")
-
         for frame_name, rows in manifests.items():
             manifest_csv = prov_dir / f"{frame_name}_manifest.csv"
             pd.DataFrame(rows).to_csv(manifest_csv, index=False)
             _log_artifact(str(manifest_csv), artifact_path="provenance")
 
     return {
-        "prov_doc": prov_doc,
         "name": name,
         "version": version,
         "inputs": input_list,

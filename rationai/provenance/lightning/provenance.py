@@ -36,14 +36,6 @@ import mlflow
 import pandas as pd
 from lightning.pytorch.callbacks import Callback
 
-# Import shared PROV helpers from prov.py to avoid duplication
-from rationai.provenance.common import (
-    get_prov_prefixes as _get_prov_prefixes,
-)
-from rationai.provenance.run import (
-    build_training_run_prov as _build_prov_document,
-)
-
 
 log = logging.getLogger(__name__)
 
@@ -125,13 +117,15 @@ def _scheduler_summary(scheduler: Any) -> dict[str, str | float]:
 
 
 class ProvenanceCallback(Callback):
-    """Lightning callback that captures PROV document + run summary.
+    """Lightning callback that logs run summary provenance to MLflow.
 
     Reads environment data from :class:`EnvironmentCallback` and dataset
     verification/split data from :class:`DatasetVerificationCallback` when
     present as sibling callbacks.  When used alone, falls back to doing its
-    own environment/verification work so the user still gets a complete PROV
-    document.
+    own environment/verification work so the run summary is complete.
+
+    Logs params, metrics, tags, split data, dataset verification and a run
+    summary JSON to the MLflow run; the PROV-O document is built externally.
 
     Args:
         model_name: Identifier for this model (shown in run name).
@@ -150,7 +144,6 @@ class ProvenanceCallback(Callback):
             preprocessing pipeline.  When given, these are the authoritative
             splits: they are referenced (not copied) in provenance and no
             train/test split is recomputed.
-        prov_prefixes: Optional override for PROV namespace prefixes.
     """
 
     def __init__(
@@ -167,7 +160,6 @@ class ProvenanceCallback(Callback):
         register_optimizer: bool = True,
         register_scheduler: bool = True,
         split_uris: dict[str, str] | None = None,
-        prov_prefixes: dict[str, str] | None = None,
     ) -> None:
         """Initialise the provenance callback.
 
@@ -185,7 +177,6 @@ class ProvenanceCallback(Callback):
             register_scheduler: Log scheduler config (or True to auto-detect).
             split_uris: Optional mapping of split name to dataset URI, used to
                 reference pre-existing splits instead of recomputing train/test.
-            prov_prefixes: Optional override for PROV namespace prefixes.
         """
         self.model_name = model_name or os.environ.get("MODEL_NAME", "model")
         self.experiment_name = experiment_name
@@ -199,7 +190,6 @@ class ProvenanceCallback(Callback):
         self.register_optimizer = register_optimizer
         self.register_scheduler = register_scheduler
         self.split_uris = split_uris
-        self._prov_prefixes = prov_prefixes
 
         # Internal state (populated by on_fit_start or sibling callbacks)
         self._run_id: str | None = None
@@ -595,9 +585,6 @@ class ProvenanceCallback(Callback):
             else:
                 return
 
-        # Get a Run object for metadata access
-        active_run = mlflow.get_run(run_id)
-
         # ── Model summary ───────────────────────────────────────
         if self.register_model and pl_module is not None:
             try:
@@ -632,11 +619,9 @@ class ProvenanceCallback(Callback):
                     raise
                 log.warning("[ProvenanceCallback] Scheduler summary failed: %s", e)
 
-        # ── PROV document + run summary ─────────────────────────
+        # ── Run summary ──────────────────────────────────────
         try:
             run_data = mlflow.get_run(run_id)
-            params = {k: str(v) for k, v in run_data.data.params.items()}
-            metrics = {k: float(v) for k, v in run_data.data.metrics.items()}
             tags = {
                 k: v
                 for k, v in run_data.data.tags.items()
@@ -666,31 +651,6 @@ class ProvenanceCallback(Callback):
 
             mlflow.log_artifact(summary_path, artifact_path="provenance")
             shutil.rmtree(summary_dir, ignore_errors=True)
-
-            # ── PROV document (§9 — configurable prefixes) ──────
-            prov_doc = _build_prov_document(
-                run_id=run_id,
-                run_name=active_run.info.run_name or f"Training_{self.model_name}",
-                params=params,
-                metrics=metrics,
-                tags=tags,
-                start_time_ms=active_run.info.start_time,
-                end_time_ms=active_run.info.end_time,
-                split_data=self._split_summary(),
-                requirements=self._frozen_requirements,
-                verification=self._verification,
-                prov_prefixes=_get_prov_prefixes(self._prov_prefixes),
-            )
-
-            prov_dir = f"_mlflow_prov_{uuid.uuid4().hex[:8]}"
-            os.makedirs(prov_dir, exist_ok=True)
-            self._temp_dirs.append(prov_dir)
-            prov_path = os.path.join(prov_dir, "prov.json")
-            with open(prov_path, "w") as f:
-                json.dump(prov_doc, f, indent=2)
-
-            mlflow.log_artifact(prov_path, artifact_path="provenance")
-            shutil.rmtree(prov_dir, ignore_errors=True)
 
             log.info("[ProvenanceCallback] Complete → %s", run_id)
         except Exception as e:

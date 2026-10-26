@@ -1,197 +1,18 @@
-"""Dataset registration, verification, and PROV-O document generation.
+"""Dataset registration and verification in MLflow.
 
-Colocates ``build_dataset_prov`` (the PROV document builder) with the
-MLflow registration entry points ``register_dataset`` and ``verify_dataset``.
+``register_dataset`` captures per-file metadata so downstream provenance
+tooling can inspect the exact state of the data; ``verify_dataset`` /
+``verify_manifest`` re-check a dataset against its recorded state.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
-import uuid
 from typing import Any
 
 import mlflow
 import pandas as pd
-
-from rationai.provenance.common import (
-    get_prov_prefixes,
-    iso_timestamp,
-    qualified,
-    qualified_name,
-    safe_id,
-    typed_value,
-)
-
-
-# ──────────────────────────────────────────────
-# PROV document builder
-# ──────────────────────────────────────────────
-
-
-def _get_user_tags() -> tuple[str, str, str]:
-    """Read username, real_name, organization from active MLflow run tags.
-
-    Returns (username, real_name, organization).  Falls back to
-    ``mlflow.user`` / empty strings when not set.
-    """
-    try:
-        client = mlflow.tracking.MlflowClient()
-        run_id = mlflow.active_run().info.run_id
-        tags = {t.key: t.value for t in client.get_run(run_id).data.tags.values()}
-    except Exception:
-        tags = {}
-
-    username = tags.get("username", tags.get("mlflow.user", "unknown"))
-    real_name = tags.get("real_name", username)
-    organization = tags.get("organization", "")
-    return username, real_name, organization
-
-
-def build_dataset_prov(
-    run_id: str,
-    dataset_name: str,
-    version: str,
-    dataset_root: str,
-    num_samples: int,
-    num_positive: int,
-    num_negative: int,
-    file_sizes: dict[str, int],
-    manifest_path: str | None = None,
-    prov_prefixes: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Build a PROV document for a dataset registration run.
-
-    Produces a ``dataset`` entity (``sosa:Sample``) linked to the
-    registration activity and metadata bundle.  Reads user info from
-    the active MLflow run's tags to create an agent and associate it
-    via ``prov:wasAssociatedWith``.
-    """
-    prefixes = prov_prefixes or get_prov_prefixes()
-
-    username, real_name, organization = _get_user_tags()
-
-    # ── AGENT (from MLflow tags) ─────────────────────
-    agent_local = safe_id(f"user_{username}")
-    agent_id = qualified("gen", agent_local)
-
-    agent_props: dict[str, list[Any]] = {}
-    agent_props["schema:name"] = typed_value(real_name)
-    if organization:
-        agent_props["schema:affiliation"] = typed_value(organization)
-    agent_props["prov:type"] = [qualified_name("schema", "Person")]
-
-    run_act_local = safe_id(f"run_{run_id}")
-    run_act_id = qualified("gen", run_act_local)
-
-    ds_local = safe_id(f"dataset_{dataset_name}_{version.replace('.', '_')}")
-    ds_id = qualified("gen", ds_local)
-
-    meta_local = run_id
-    meta_id = qualified("meta", meta_local)
-
-    main_act_local = f"DatasetReg_{run_id[:8]}"
-    main_act_id = qualified("blank", main_act_local)
-
-    entities: dict[str, dict[str, Any]] = {}
-    activities: dict[str, dict[str, Any]] = {}
-    agents: dict[str, dict[str, Any]] = {agent_id: agent_props}
-    used: dict[str, dict[str, Any]] = {}
-    was_generated_by: dict[str, dict[str, Any]] = {}
-    was_associated_with: dict[str, dict[str, Any]] = {}
-
-    rel_counter = [0]
-
-    def _blank_rel_id() -> str:
-        rid = f"_:n{rel_counter[0]}"
-        rel_counter[0] += 1
-        return rid
-
-    now = iso_timestamp()
-
-    # ── DATASET ENTITY ───────────────────────────────────
-    ds_props: dict[str, list[Any]] = {
-        "schema:name": typed_value(dataset_name),
-        "prov:type": [qualified_name("sosa", "Sample")],
-        "dct:description": typed_value(
-            f"Dataset {dataset_name} v{version} ({num_samples} samples)",
-        ),
-    }
-    if manifest_path:
-        ds_props["schema:url"] = typed_value(manifest_path)
-    entities[ds_id] = ds_props
-
-    # ── ACTIVITY (the registration action) ────────────────
-    run_activity: dict[str, Any] = {}
-    run_activity["prov:type"] = [qualified_name("schema", "Action")]
-    run_activity["prov:startTime"] = [now]
-    run_activity["prov:endTime"] = [now]
-    run_activity["schema:name"] = typed_value(f"Register dataset {dataset_name}")
-    run_activity["gen:dataset_name"] = typed_value(dataset_name)
-    run_activity["gen:dataset_version"] = typed_value(version)
-    activities[run_act_id] = run_activity
-
-    # ── USED (activity consumed the dataset entity) ──────
-    used[_blank_rel_id()] = {
-        "prov:activity": run_act_id,
-        "prov:entity": ds_id,
-    }
-
-    # ── CPM METADATA ENTITY ───────────────────────────────
-    meta_entity: dict[str, list[Any]] = {}
-    meta_entity["prov:type"] = [qualified_name("cpm", "BundleMetadata")]
-    meta_entity["gen:dataset_name"] = typed_value(dataset_name)
-    meta_entity["gen:dataset_version"] = typed_value(version)
-    meta_entity["gen:dataset_root"] = typed_value(dataset_root)
-    meta_entity["gen:num_samples"] = typed_value(str(num_samples))
-    meta_entity["gen:num_positive"] = typed_value(str(num_positive))
-    meta_entity["gen:num_negative"] = typed_value(str(num_negative))
-    if manifest_path:
-        meta_entity["gen:manifest_path"] = typed_value(manifest_path)
-
-    file_sizes_str = json.dumps(file_sizes)
-    meta_entity["gen:file_sizes"] = [file_sizes_str]
-    entities[meta_id] = meta_entity
-
-    # ── CPM MAIN ACTIVITY ────────────────────────────────
-    main_activity: dict[str, Any] = {}
-    main_activity["prov:type"] = [qualified_name("cpm", "mainActivity")]
-    main_activity["cpm:referencedMetaBundleId"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": meta_id},
-    ]
-    main_activity["dct:hasPart"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": run_act_id},
-    ]
-    activities[main_act_id] = main_activity
-
-    # ── RELATIONSHIPS ─────────────────────────────────────
-    was_associated_with[_blank_rel_id()] = {
-        "prov:activity": run_act_id,
-        "prov:agent": agent_id,
-    }
-    was_generated_by[_blank_rel_id()] = {
-        "prov:entity": meta_id,
-        "prov:activity": run_act_id,
-    }
-
-    # ── ASSEMBLE BUNDLE ───────────────────────────────────
-    inner: dict[str, Any] = {"prefix": prefixes}
-    if entities:
-        inner["entity"] = entities
-    if activities:
-        inner["activity"] = activities
-    if agents:
-        inner["agent"] = agents
-    if used:
-        inner["used"] = used
-    if was_generated_by:
-        inner["wasGeneratedBy"] = was_generated_by
-    if was_associated_with:
-        inner["wasAssociatedWith"] = was_associated_with
-
-    bundle_key = f"storage:{run_id}"
-    return {"bundle": {bundle_key: inner}}
 
 
 # ──────────────────────────────────────────────
@@ -481,50 +302,6 @@ def register_dataset(
             }
         )
 
-        # ── PROV-O document ────────────────────────────────
-        prov_doc = build_dataset_prov(
-            run_id=run_id,
-            dataset_name=dataset_name,
-            version=version,
-            dataset_root=dataset_dir,
-            num_samples=len(samples),
-            num_positive=sum(1 for s in samples if s["label"] == 1),
-            num_negative=sum(1 for s in samples if s["label"] == 0),
-            file_sizes=file_sizes,
-            manifest_path=manifest_path,
-        )
-
-        prov_dir = f"_dataset_prov_{uuid.uuid4().hex[:8]}"
-        os.makedirs(prov_dir, exist_ok=True)
-        prov_path = os.path.join(prov_dir, "prov.json")
-        try:
-            with open(prov_path, "w") as f:
-                json.dump(prov_doc, f, indent=2)
-            mlflow.log_artifact(prov_path, artifact_path="provenance")
-        finally:
-            shutil.rmtree(prov_dir, ignore_errors=True)
-
-        # ── Legacy dataset provenance JSON (backward compat) ──
-        legacy_prov_dir = f"_dataset_legacy_{uuid.uuid4().hex[:8]}"
-        os.makedirs(legacy_prov_dir, exist_ok=True)
-        legacy_path = os.path.join(legacy_prov_dir, "dataset_provenance.json")
-        try:
-            with open(legacy_path, "w") as f:
-                json.dump(
-                    {
-                        "dataset_name": dataset_name,
-                        "version": version,
-                        "dataset_root": dataset_dir,
-                        "file_sizes": file_sizes,
-                        "file_mtimes": file_mtimes,
-                        "num_samples": len(samples),
-                    },
-                    f,
-                    indent=2,
-                )
-            mlflow.log_artifact(legacy_path, artifact_path="provenance")
-        finally:
-            shutil.rmtree(legacy_prov_dir, ignore_errors=True)
     finally:
         if run_active:
             mlflow.end_run()

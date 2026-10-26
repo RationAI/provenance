@@ -1,4 +1,8 @@
-"""Smoke tests: PROV builders are pure functions; imports stay torch/lightning/mlkit-free."""
+"""Smoke tests: the package is a pure MLflow ingredient logger.
+
+It must import without torch/lightning/mlkit, expose the logging API, and
+contain no PROV document builders (those live in an external tool).
+"""
 
 import sys
 
@@ -11,27 +15,27 @@ def test_import_is_standalone():
     assert "rationai.mlkit" not in sys.modules
 
 
-def test_build_training_run_prov_document():
-    from rationai.provenance.run import build_training_run_prov
+def test_public_api_is_logging_only():
+    import rationai.provenance as rp
 
-    doc = build_training_run_prov(
-        run_id="0123456789abcdef0123456789abcdef",
-        run_name="smoke-run",
-        params={"lr": "0.1"},
-        metrics={"acc": 0.9},
-        tags={"user_id": "u1"},
-    )
+    for name in (
+        "register_new_user",
+        "register_dataset",
+        "verify_dataset",
+        "capture_environment",
+        "log_environment",
+        "log_provenance",
+    ):
+        assert hasattr(rp, name), name
 
-    inner = doc["bundle"]["storage:0123456789abcdef0123456789abcdef"]
-    assert "prefix" in inner
-    assert "entity" in inner
-    assert "activity" in inner
-    assert "agent" in inner
-    assert "wasAssociatedWith" in inner
+    # PROV document builders were removed; PROV-JSON is built externally.
+    assert not hasattr(rp, "build_user_prov")
+    assert not hasattr(rp, "build_dataset_prov")
+    assert not hasattr(rp, "build_training_run_prov")
 
 
-def test_common_helpers():
-    from rationai.provenance.common import get_prov_prefixes, safe_id
+def test_safe_id():
+    from rationai.provenance.log_provenance import safe_id
 
     assert safe_id("hello world") == "hello_world"
-    assert "prov" in get_prov_prefixes()
+    assert safe_id("a/b:c") == "a_b_c"

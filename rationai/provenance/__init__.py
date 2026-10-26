@@ -1,40 +1,23 @@
-"""Provenance tracking - PROV-O-aware logging to MLflow.
+"""Provenance ingredient logging to MLflow.
 
 Submodules:
-    common          - shared helpers (prefixes, IDs, timestamps)
-    user            - build_user_prov + register_new_user
-    dataset         - build_dataset_prov + register_dataset + verify_dataset
-    run             - build_training_run_prov
-    log_provenance  - universal run provenance (any pipeline step,
-                      incl. splits via dict[split_name, DataFrame])
+    user            - register_new_user (``User_Registry``)
+    dataset         - register_dataset + verify_dataset + lookup helpers
+    environment     - capture_environment (git, hardware, docker, seeds)
+    log_provenance  - universal ingredient logging (params, stats, manifests)
 
-For automatic provenance capture with Lightning, use
-:class:`~rationai.mlkit.lightning.callbacks.provenance.ProvenanceCallback`.
+This package logs the *ingredients* of provenance (who, which data, which
+environment, which config); the W3C PROV-O document itself is assembled by
+an external tool from these MLflow records.
 """
 
-from __future__ import annotations
-
-from rationai.provenance.dataset import (
-    build_dataset_prov,
-    register_dataset,
-    verify_dataset,
-)
-from rationai.provenance.environment import (
-    capture_environment,
-    log_environment,
-)
+from rationai.provenance.dataset import register_dataset, verify_dataset
+from rationai.provenance.environment import capture_environment, log_environment
 from rationai.provenance.log_provenance import log_provenance
-from rationai.provenance.run import build_training_run_prov
-from rationai.provenance.user import (
-    build_user_prov,
-    register_new_user,
-)
+from rationai.provenance.user import register_new_user
 
 
 __all__ = [
-    "build_dataset_prov",
-    "build_training_run_prov",
-    "build_user_prov",
     "capture_environment",
     "log_environment",
     "log_provenance",
