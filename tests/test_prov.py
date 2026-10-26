@@ -45,18 +45,18 @@ def test_detect_job_limits(monkeypatch):
     from rationai.provenance.environment import detect_job_limits
 
     for key in (
-        "RATIONAI_JOB_CPU_LIMIT",
-        "RATIONAI_JOB_MEMORY_LIMIT",
-        "RATIONAI_JOB_USER",
-        "RATIONAI_JOB_NAME",
+        "JOB_CPU_LIMIT",
+        "JOB_MEMORY_LIMIT",
+        "JOB_USER",
+        "JOB_NAME",
     ):
         monkeypatch.delenv(key, raising=False)
 
     assert detect_job_limits() == {}
 
-    monkeypatch.setenv("RATIONAI_JOB_CPU_LIMIT", "4")
-    monkeypatch.setenv("RATIONAI_JOB_MEMORY_LIMIT", "8Gi")
-    monkeypatch.setenv("RATIONAI_JOB_USER", "jdoe")
+    monkeypatch.setenv("JOB_CPU_LIMIT", "4")
+    monkeypatch.setenv("JOB_MEMORY_LIMIT", "8Gi")
+    monkeypatch.setenv("JOB_USER", "jdoe")
 
     assert detect_job_limits() == {
         "cpu_limit": "4",

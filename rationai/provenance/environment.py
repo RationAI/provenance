@@ -42,11 +42,11 @@ def lookup_user_run() -> tuple[str | None, dict[str, str]]:
 
     from rationai.provenance.dataset import lookup_experiment
 
-    # Set by kube-jobs (RATIONAI_JOB_USER) or manually for local runs.
-    username = os.environ.get("RATIONAI_JOB_USER") or os.environ.get("MLFLOW_USER")
+    # Set by kube-jobs (JOB_USER) or manually for local runs.
+    username = os.environ.get("JOB_USER") or os.environ.get("MLFLOW_USER")
     if not username:
         raise RuntimeError(
-            "RATIONAI_JOB_USER / MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running."
+            "JOB_USER / MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running."
         )
 
     exp_id = lookup_experiment("User_Registry")
@@ -233,7 +233,7 @@ def detect_seeds() -> dict[str, str]:
 
 
 # ──────────────────────────────────────────────
-# Job scheduler metadata (kube-jobs RATIONAI_JOB_* env vars)
+# Job scheduler metadata (kube-jobs JOB_* env vars)
 # ──────────────────────────────────────────────
 
 # Keys injected by kube-jobs' submit_job; suffix lowercased here.
@@ -252,7 +252,7 @@ _JOB_ENV_KEYS = (
 
 
 def detect_job_limits() -> dict[str, str]:
-    """Read RATIONAI_JOB_* metadata set by the job scheduler, if any.
+    """Read JOB_* metadata set by the job scheduler, if any.
 
     Returns what the job *requested* (cpu/memory/gpu limits, image,
     cluster, user). Empty dict when not running under kube-jobs.
@@ -260,7 +260,7 @@ def detect_job_limits() -> dict[str, str]:
     return {
         key: value
         for key in _JOB_ENV_KEYS
-        if (value := os.environ.get(f"RATIONAI_JOB_{key.upper()}")) is not None
+        if (value := os.environ.get(f"JOB_{key.upper()}")) is not None
     }
 
 

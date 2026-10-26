@@ -16,7 +16,7 @@ Lightning/PyTorch integration on top (`@autolog`, `ProvenanceCallback`, console 
 - **User registry** — `register_new_user` / `lookup_user_run`: register people once, link every run to an agent.
 - **Dataset registry** — `register_dataset` / `lookup_dataset_run`: file sizes, mtimes, manifests, verification.
 - **Environment snapshot** — `capture_environment`: Python packages, hardware (GPU/CPU), docker image, seeds.
-- **Job metadata** — `RATIONAI_JOB_*` env vars (set by [kube-jobs](https://gitlab.ics.muni.cz/rationai/infrastructure/kube-jobs)): requested CPU/memory/GPU limits, cluster, user → logged as `job_*` tags.
+- **Job metadata** — `JOB_*` env vars (set by [kube-jobs](https://gitlab.ics.muni.cz/rationai/infrastructure/kube-jobs)): requested CPU/memory/GPU limits, cluster, user → logged as `job_*` tags.
 - **Run ingredients** — `log_provenance` logs flattened config params, output dataframe stats, frame manifests (CSV artifacts) and upstream input URIs to the active MLflow run.
 
 ## Install
