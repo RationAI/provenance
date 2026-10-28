@@ -70,8 +70,24 @@ def detect_manifest() -> tuple[str | None, str | None]:
 # ──────────────────────────────────────────────
 
 
+PATH_COLUMNS = ("wsi_path", "path", "slide", "file")
+LABEL_COLUMNS = ("cancer", "label")
+
+
+def _pick_column(df: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
+    """Column whose (stripped, lowercased) name is in *candidates*."""
+    columns = {str(c).strip().lower(): c for c in df.columns}
+    return next((columns[c] for c in candidates if c in columns), None)
+
+
 def load_manifest(manifest_path: str, data_root: str) -> list[dict[str, Any]]:
-    """Load a manifest.csv and resolve WSI paths.
+    """Load a manifest.csv and resolve file paths.
+
+    Only a path column is required — ``wsi_path`` / ``path`` / ``slide`` /
+    ``file`` (matched case-insensitively). An optional ``cancer`` / ``label``
+    column supplies integer labels (``0`` when absent — labels matter only
+    for stratified splits / classification, not for registration or
+    verification, which use file sizes + mtimes).
 
     Returns a list of dicts with keys ``path`` (absolute) and ``label``.
 
@@ -79,11 +95,18 @@ def load_manifest(manifest_path: str, data_root: str) -> list[dict[str, Any]]:
     ``ProvenanceCallback`` to avoid duplicating the CSV iteration pattern.
     """
     df = pd.read_csv(manifest_path)
+    path_col = _pick_column(df, PATH_COLUMNS)
+    if path_col is None:
+        raise ValueError(
+            f"{manifest_path}: no path column — name one of {PATH_COLUMNS}"
+        )
+    label_col = _pick_column(df, LABEL_COLUMNS)
     samples: list[dict[str, Any]] = []
     for _, row in df.iterrows():
-        rel = row["wsi_path"]
+        rel = row[path_col]
         full = os.path.join(data_root, rel) if not os.path.isabs(rel) else rel
-        samples.append({"path": full, "label": int(row["cancer"])})
+        label = int(row[label_col]) if label_col else 0
+        samples.append({"path": full, "label": label})
     return samples
 
 
