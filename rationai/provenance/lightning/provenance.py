@@ -318,17 +318,11 @@ class ProvenanceCallback(Callback):
             "test": self._split_data.get("test"),
         }
 
-    def _lookup_user_safe(self) -> tuple[str | None, dict[str, str]]:
-        """Best-effort user lookup; returns ``(run_id, tags)`` or ``(None, {})``."""
+    def _lookup_user(self) -> tuple[str | None, dict[str, str]]:
+        """User lookup — an unregistered user aborts the run (create_user is a prerequisite)."""
         from rationai.provenance.environment import lookup_user_run
 
-        try:
-            return lookup_user_run()
-        except Exception as e:
-            if self.strict:
-                raise
-            log.warning("[ProvenanceCallback] User lookup failed: %s", e)
-            return None, {}
+        return lookup_user_run()
 
     def _detect_environment_params(
         self, trainer: Any
@@ -620,7 +614,7 @@ class ProvenanceCallback(Callback):
 
     def _fallback_on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Do environment + verification work when no sibling callbacks exist."""
-        user_run_id, user_tags = self._lookup_user_safe()
+        user_run_id, user_tags = self._lookup_user()
         hardware, docker, pytorch, seeds = self._detect_environment_params(trainer)
         self._load_provided_splits_safe()
 

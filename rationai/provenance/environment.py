@@ -52,27 +52,25 @@ def lookup_user_run() -> tuple[str | None, dict[str, str]]:
     exp_id = lookup_experiment("User_Registry")
     if exp_id is None:
         raise RuntimeError(
-            "User_Registry experiment not found. Cannot lookup user run. Please ensure that the User_Registry experiment exists in MLflow."
+            "User_Registry experiment not found — register yourself first "
+            "(register_new_user / the create_user step, once ever), then rerun."
         )
 
     runs_df = cast(
         "pd.DataFrame",
         mlflow.search_runs(experiment_ids=[exp_id], output_format="pandas"),
     )
-    if runs_df.empty:
-        raise RuntimeError(
-            "No runs found for user. Cannot lookup user run. Please ensure that the User_Registry experiment has at exactly one run for your username."
-        )
-
-    if "tags.username" not in runs_df.columns:
-        raise RuntimeError(
-            "No 'tags.username' column in User_Registry. No user runs tagged yet."
-        )
-    matched = runs_df[runs_df["tags.username"] == username]
+    matched = (
+        runs_df[runs_df["tags.username"] == username]
+        if "tags.username" in runs_df.columns
+        else runs_df.iloc[0:0]
+    )
 
     if matched.empty:
         raise RuntimeError(
-            f"No run found for username '{username}' in User_Registry. Cannot lookup user run. Please ensure that the User_Registry experiment has exactly one run for your username."
+            f"User '{username}' is not registered in User_Registry — "
+            "register yourself first (register_new_user / the create_user step, "
+            "once ever), then rerun. Runs with an unregistered user are not allowed."
         )
 
     row = matched.iloc[0]
@@ -371,12 +369,10 @@ def _detect_all_sections(
     except Exception:
         result["mlflow_version"] = "unknown"
 
-    def _user() -> tuple[str | None, dict[str, str]]:
-        user_run_id, user_tags = lookup_user_run()
-        return user_run_id, (user_tags or {})
-
-    user_run_id, user_tags = _attempt("User lookup", _user, (None, {}), strict)
-    result.update(user_run_id=user_run_id, user_tags=user_tags)
+    # Not best-effort: a run whose user is missing from User_Registry must
+    # fail — create_user is a hard prerequisite for every other step.
+    user_run_id, user_tags = lookup_user_run()
+    result.update(user_run_id=user_run_id, user_tags=user_tags or {})
 
     result["hardware"] = _attempt(
         "Hardware detection",

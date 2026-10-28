@@ -89,3 +89,38 @@ def test_flatten_scalars_without_dictconfig_keeps_raw():
     flat: dict[str, str] = {}
     _flatten_scalars({"a": {"b": "${c}"}}, "", flat)
     assert flat["a.b"] == "${c}"
+
+
+def test_unregistered_user_fails_until_registered(tmp_path, monkeypatch):
+    """User lookup is a hard prerequisite: an unregistered user aborts the run."""
+    import mlflow
+    import pytest
+
+    from rationai.provenance.environment import capture_environment
+    from rationai.provenance.user import register_new_user
+
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path}/mlflow.db")
+    monkeypatch.delenv("JOB_USER", raising=False)
+    monkeypatch.setenv("MLFLOW_USER", "ghost")
+
+    mlflow.create_experiment("User_Registry")  # exists but stays inactive
+    mlflow.set_experiment("Default")
+
+    # not registered → any run fails at environment capture
+    with mlflow.start_run(run_name="step"):
+        with pytest.raises(RuntimeError, match="not registered in User_Registry"):
+            capture_environment(snapshot_env=False, skip_hardware=True)
+    mlflow.end_run()
+
+    # register once → the same capture succeeds
+    register_new_user(
+        username="ghost",
+        real_name="Ghost User",
+        email="ghost@example.com",
+        organization="RationAI",
+        lead_name="Lead",
+        lead_email="lead@example.com",
+    )
+    with mlflow.start_run(run_name="step2"):
+        result = capture_environment(snapshot_env=False, skip_hardware=True)
+    assert result["user_run_id"]
