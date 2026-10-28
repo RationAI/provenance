@@ -70,7 +70,7 @@ def detect_manifest() -> tuple[str | None, str | None]:
 # ──────────────────────────────────────────────
 
 
-PATH_COLUMNS = ("wsi_path", "path", "slide", "file")
+PATH_COLUMNS = ("wsi_path", "path", "slide", "slide_path", "file")
 LABEL_COLUMNS = ("cancer", "label")
 
 
@@ -246,21 +246,29 @@ def verify_manifest(
 
 
 def register_dataset(
-    dataset_dir: str,
+    csv: str,
+    path_column: str | None = None,
+    experiment_name: str = "Dataset_Registry",
     dataset_name: str | None = None,
     version: str = "1.0.0",
-    experiment_name: str = "Dataset_Registry",
 ) -> str:
-    """Register a dataset in MLflow's Dataset_Registry experiment.
+    """Register a dataset from its cohort csv.
 
-    Captures per-file metadata (size, last modified) and stores it as tags
-    so future training runs can inspect the exact state of the data.
+    Takes the csv, the column with the file paths, and the experiment —
+    that's it. Paths are absolute or relative to the csv's folder; an
+    optional ``cancer`` / ``label`` column supplies integer labels
+    (``0`` when absent — labels matter for stratified splits, not for
+    the fingerprint). Writes the canonical ``manifest.csv`` next to the
+    csv (the data itself stays in place) and stores the per-file
+    fingerprint (size + mtime) in the registration run.
 
     Args:
-        dataset_dir: Path to the dataset root (must contain manifest.csv).
-        dataset_name: Human-readable name (defaults to directory basename).
-        version: Dataset version string.
-        experiment_name: MLflow experiment for registration.
+        csv: the cohort csv (or xlsx) listing the sample files.
+        path_column: column holding the file paths — auto-detected
+            from *csv*'s columns (case-insensitive) when omitted.
+        experiment_name: MLflow experiment for the registration run.
+        dataset_name: defaults to the csv folder's name.
+        version: dataset version string.
 
     Returns:
         The run_id of the registration run.
@@ -268,33 +276,70 @@ def register_dataset(
     Example:
         from rationai.provenance import register_dataset
 
-        run_id = register_dataset("data/pato_cohort_01", version="2.0")
-        print(f"Registered as {run_id}")
-    """
-    dataset_dir = os.path.abspath(dataset_dir)
-    manifest_path = os.path.join(dataset_dir, "manifest.csv")
-    if not os.path.isfile(manifest_path):
-        raise FileNotFoundError(
-            f"No manifest.csv found in {dataset_dir}. "
-            "Dataset registration requires a manifest.csv file.",
+        run_id = register_dataset(
+            "data/mammaprint/slides.csv",
+            path_column="slide_path",
+            experiment_name="Mammaprint",
         )
+    """
+    csv = os.path.abspath(csv)
+    dataset_dir = os.path.dirname(csv)
+    df = (
+        pd.read_excel(csv)
+        if str(csv).lower().endswith((".xlsx", ".xls"))
+        else pd.read_csv(csv)
+    )
+
+    if path_column is None:
+        path_column = _pick_column(df, PATH_COLUMNS)
+        if path_column is None:
+            raise ValueError(
+                f"{csv}: no path column — pass path_column= or "
+                f"name one of {PATH_COLUMNS}"
+            )
+    elif path_column not in df.columns:
+        raise ValueError(
+            f"{csv}: no column {path_column!r} — found {list(df.columns)}"
+        )
+    label_col = _pick_column(df, LABEL_COLUMNS)
+
+    samples: list[dict[str, Any]] = []
+    for _, row in df.iterrows():
+        rel = str(row[path_column]).strip()
+        full = rel if os.path.isabs(rel) else os.path.join(dataset_dir, rel)
+        samples.append(
+            {"path": full, "label": int(row[label_col]) if label_col else 0}
+        )
+    missing = [s["path"] for s in samples if not os.path.isfile(s["path"])]
+    if missing:
+        raise FileNotFoundError(
+            f"{len(missing)}/{len(samples)} files not found, "
+            f"e.g. {missing[:3]} — check the paths in {csv}"
+        )
+
+    # canonical manifest next to the csv — data itself stays in place
+    manifest_path = os.path.join(dataset_dir, "manifest.csv")
+    pd.DataFrame(
+        {
+            "wsi_path": [
+                os.path.relpath(s["path"], dataset_dir)
+                if s["path"].startswith(dataset_dir + os.sep)
+                else s["path"]
+                for s in samples
+            ],
+            "cancer": [s["label"] for s in samples],
+        }
+    ).to_csv(manifest_path, index=False)
+
+    file_sizes = {}
+    file_mtimes = {}
+    for s in samples:
+        st = os.stat(s["path"])
+        file_sizes[os.path.basename(s["path"])] = st.st_size
+        file_mtimes[os.path.basename(s["path"])] = st.st_mtime
 
     if dataset_name is None:
         dataset_name = os.path.basename(dataset_dir)
-
-    samples = load_manifest(manifest_path, dataset_dir)
-    file_sizes = {}
-    file_mtimes = {}
-
-    for s in samples:
-        basename = os.path.basename(s["path"])
-        if os.path.isfile(s["path"]):
-            st = os.stat(s["path"])
-            file_sizes[basename] = st.st_size
-            file_mtimes[basename] = st.st_mtime
-        else:
-            file_sizes[basename] = -1
-            file_mtimes[basename] = -1
 
     mlflow.set_experiment(experiment_name)
     run = mlflow.start_run(
@@ -312,6 +357,7 @@ def register_dataset(
         mlflow.log_params(
             {
                 "dataset_root": dataset_dir,
+                "source_csv": os.path.basename(csv),
                 "num_samples": len(samples),
                 "num_positive": sum(1 for s in samples if s["label"] == 1),
                 "num_negative": sum(1 for s in samples if s["label"] == 0),

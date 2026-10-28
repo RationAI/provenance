@@ -43,11 +43,12 @@ register_new_user(
 ```python
 from rationai.provenance import register_dataset
 
-register_dataset(dataset_dir="/data/my-dataset", dataset_name="my-dataset", version="1.0.0")
+register_dataset("/data/my-dataset/slides.csv", path_column="slide_path", experiment_name="MyProject")
 ```
 
-Records every file's size and mtime (plus its manifest, if present) into the
-`Dataset_Registry` MLflow experiment.
+Records every file's size and mtime into the given MLflow experiment
+(defaults to `Dataset_Registry`), and writes the canonical `manifest.csv`
+next to the csv.
 
 ### 3. Verify + log in your training script
 

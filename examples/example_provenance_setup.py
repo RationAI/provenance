@@ -71,9 +71,9 @@ def create_dummy_data(dataset_dir: str = "data/example_dataset"):
 def register_example_dataset(dataset_dir: str = "data/example_dataset"):
     """Register the dummy dataset into MLflow's Dataset_Registry experiment."""
     run_id = register_dataset(
-        dataset_dir=dataset_dir,
+        csv=os.path.join(dataset_dir, "manifest.csv"),
         dataset_name="example_cohort",
-        version="1.0.0",
+        experiment_name="Dataset_Registry",
     )
     return run_id
 
