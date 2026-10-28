@@ -40,6 +40,21 @@ from lightning.pytorch.callbacks import Callback
 log = logging.getLogger(__name__)
 
 
+def _run_id_from_uri(uri: str) -> str | None:
+    """Extract the run ID from an MLflow artifact URI.
+
+    Handles ``runs:/<run_id>/...`` and
+    ``mlflow-artifacts:/<experiment_id>/<run_id>/...``.
+    """
+    if uri.startswith("runs:/"):
+        first = uri[len("runs:/"):].split("/", 1)[0]
+        return first or None
+    if uri.startswith("mlflow-artifacts:/"):
+        parts = uri[len("mlflow-artifacts:/"):].strip("/").split("/")
+        return parts[1] if len(parts) > 1 else None
+    return None
+
+
 # ──────────────────────────────────────────────
 # Model / Optimizer / Scheduler summaries
 # ──────────────────────────────────────────────
@@ -143,7 +158,9 @@ class ProvenanceCallback(Callback):
             (``mlflow-artifacts:/...`` or local path) produced by an upstream
             preprocessing pipeline.  When given, these are the authoritative
             splits: they are referenced (not copied) in provenance and no
-            train/test split is recomputed.
+            train/test split is recomputed.  The dataset is verified against
+            the registration the split run consumed (``fail_fast`` aborts
+            on mismatch).
     """
 
     def __init__(
@@ -177,6 +194,8 @@ class ProvenanceCallback(Callback):
             register_scheduler: Log scheduler config (or True to auto-detect).
             split_uris: Optional mapping of split name to dataset URI, used to
                 reference pre-existing splits instead of recomputing train/test.
+                The dataset is verified against the registration the split
+                run consumed.
         """
         self.model_name = model_name or os.environ.get("MODEL_NAME", "model")
         self.experiment_name = experiment_name
@@ -343,8 +362,16 @@ class ProvenanceCallback(Callback):
                 raise
             log.warning("[ProvenanceCallback] Loading provided splits failed: %s", e)
 
-    def _resolve_manifest(self) -> tuple[str | None, str | None]:
-        """Resolve ``(manifest_path, data_root)``, auto-detecting when unset."""
+    def _resolve_manifest(self) -> tuple[str | None, str | None, str | None]:
+        """Resolve ``(manifest_path, data_root, dataset_run_id)``.
+
+        With ``split_uris``, the registration to verify against comes from
+        the run that produced the splits: its ``dataset_run_id`` tag names
+        the ``Dataset_Registry`` run, whose ``dataset_root`` param says where
+        the data (and its ``manifest.csv``) lives.  Without them, the
+        manifest is auto-detected under ``data/`` and the latest
+        registration is used (``dataset_run_id=None``).
+        """
         from rationai.provenance.dataset import detect_manifest
 
         manifest_path = self.manifest_path
@@ -354,9 +381,88 @@ class ProvenanceCallback(Callback):
             manifest_path, data_root = detect_manifest()
         elif data_root is None and manifest_path is not None:
             data_root = os.path.dirname(os.path.abspath(manifest_path))
-        return manifest_path, data_root
 
-    def _verify_and_split(self, manifest_path: str, data_root: str) -> None:
+        dataset_run_id: str | None = None
+        if self.split_uris:
+            resolved = self._dataset_from_split_run()
+            if resolved is not None:
+                chained_manifest, chained_root, dataset_run_id = resolved
+                manifest_path = manifest_path or chained_manifest
+                data_root = data_root or chained_root
+
+        if manifest_path is None and data_root is not None:
+            candidate = os.path.join(data_root, "manifest.csv")
+            if os.path.isfile(candidate):
+                manifest_path = candidate
+
+        return manifest_path, data_root, dataset_run_id
+
+    def _dataset_from_split_run(self) -> tuple[str, str, str] | None:
+        """Resolve ``(manifest_path, data_root, dataset_run_id)`` from splits.
+
+        The ``split_uris`` point at artifacts of the run that produced the
+        splits; its ``dataset_run_id`` tag names the registration it
+        consumed, and the registration run recorded ``dataset_root`` —
+        from these the manifest to verify is fully determined.  Returns
+        ``None`` (with a warning) when the chain cannot be resolved.
+        """
+        uri = next(iter(self.split_uris.values()))
+        run_id = _run_id_from_uri(uri)
+        if not run_id:
+            log.warning(
+                "[ProvenanceCallback] Cannot read a run ID from split URI %r "
+                "— skipping dataset verification",
+                uri,
+            )
+            return None
+        try:
+            run = mlflow.get_run(run_id)
+        except Exception as e:
+            log.warning(
+                "[ProvenanceCallback] Split run %s not found: %s — "
+                "skipping dataset verification",
+                run_id,
+                e,
+            )
+            return None
+        dataset_run_id = run.data.tags.get("dataset_run_id")
+        if not dataset_run_id:
+            log.warning(
+                "[ProvenanceCallback] Split run %s has no dataset_run_id tag "
+                "— skipping dataset verification",
+                run_id,
+            )
+            return None
+        try:
+            dataset_root = mlflow.get_run(dataset_run_id).data.params.get(
+                "dataset_root"
+            )
+        except Exception as e:
+            log.warning(
+                "[ProvenanceCallback] Registration run %s not found: %s — "
+                "skipping dataset verification",
+                dataset_run_id,
+                e,
+            )
+            return None
+        manifest_path = (
+            os.path.join(dataset_root, "manifest.csv") if dataset_root else None
+        )
+        if not manifest_path or not os.path.isfile(manifest_path):
+            log.warning(
+                "[ProvenanceCallback] No manifest.csv under recorded "
+                "dataset_root %r — skipping dataset verification",
+                dataset_root,
+            )
+            return None
+        return manifest_path, str(dataset_root), dataset_run_id
+
+    def _verify_and_split(
+        self,
+        manifest_path: str,
+        data_root: str,
+        dataset_run_id: str | None = None,
+    ) -> None:
         """Verify the dataset manifest and (legacy) compute a train/test split."""
         from rationai.provenance.dataset import (
             lookup_dataset_run,
@@ -364,7 +470,7 @@ class ProvenanceCallback(Callback):
         )
 
         # ── Verification (always) ────────────────────────────
-        dataset_run_id = lookup_dataset_run()
+        dataset_run_id = dataset_run_id or lookup_dataset_run()
         verification = verify_manifest(manifest_path, data_root, dataset_run_id)
         self._verification = verification or {}
         for detail in verification.get("details", []):
@@ -457,7 +563,12 @@ class ProvenanceCallback(Callback):
                 raise
             log.warning("[ProvenanceCallback] Split artifact logging failed: %s", e)
 
-    def _log_run_tags(self, user_run_id: str | None, user_tags: dict[str, str]) -> None:
+    def _log_run_tags(
+        self,
+        user_run_id: str | None,
+        user_tags: dict[str, str],
+        dataset_run_id: str | None = None,
+    ) -> None:
         """Set provenance tags (user / dataset run links, start time)."""
         from rationai.provenance.dataset import lookup_dataset_run
 
@@ -468,7 +579,7 @@ class ProvenanceCallback(Callback):
                 if key in user_tags:
                     tags[key] = user_tags[key]
 
-        dataset_run_id = lookup_dataset_run()
+        dataset_run_id = dataset_run_id or lookup_dataset_run()
         if dataset_run_id:
             tags["dataset_run_id"] = dataset_run_id
 
@@ -496,16 +607,16 @@ class ProvenanceCallback(Callback):
         hardware, docker, pytorch, seeds = self._detect_environment_params(trainer)
         self._load_provided_splits_safe()
 
-        manifest_path, data_root = self._resolve_manifest()
+        manifest_path, data_root, dataset_run_id = self._resolve_manifest()
         if manifest_path and data_root:
-            self._verify_and_split(manifest_path, data_root)
+            self._verify_and_split(manifest_path, data_root, dataset_run_id)
         else:
             log.warning(
                 "[ProvenanceCallback] No manifest.csv found — "
-                "train/test split not logged."
+                "dataset verification skipped."
             )
 
-        self._log_run_tags(user_run_id, user_tags)
+        self._log_run_tags(user_run_id, user_tags, dataset_run_id)
 
         # ── Params: hardware + docker + pytorch + split config ──
         all_params: dict[str, str | float | int] = {
