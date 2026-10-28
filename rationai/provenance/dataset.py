@@ -255,12 +255,13 @@ def register_dataset(
     """Register a dataset from its cohort csv.
 
     Takes the csv, the column with the file paths, and the experiment —
-    that's it. Paths are absolute or relative to the csv's folder; an
-    optional ``cancer`` / ``label`` column supplies integer labels
-    (``0`` when absent — labels matter for stratified splits, not for
-    the fingerprint). Writes the canonical ``manifest.csv`` next to the
-    csv (the data itself stays in place) and stores the per-file
-    fingerprint (size + mtime) in the registration run.
+    that's it. Paths are absolute or relative to the csv's folder.
+    Labels are deliberately not part of registration — classes live in
+    the cohort table itself, in whatever format it has; whoever needs
+    them joins on the cohort. Writes the canonical ``manifest.csv``
+    (paths only) next to the csv — the data itself stays in place — and
+    stores the per-file fingerprint (size + mtime) in the registration
+    run.
 
     Args:
         csv: the cohort csv (or xlsx) listing the sample files.
@@ -301,15 +302,12 @@ def register_dataset(
         raise ValueError(
             f"{csv}: no column {path_column!r} — found {list(df.columns)}"
         )
-    label_col = _pick_column(df, LABEL_COLUMNS)
 
     samples: list[dict[str, Any]] = []
     for _, row in df.iterrows():
         rel = str(row[path_column]).strip()
         full = rel if os.path.isabs(rel) else os.path.join(dataset_dir, rel)
-        samples.append(
-            {"path": full, "label": int(row[label_col]) if label_col else 0}
-        )
+        samples.append({"path": full})
     missing = [s["path"] for s in samples if not os.path.isfile(s["path"])]
     if missing:
         raise FileNotFoundError(
@@ -317,7 +315,7 @@ def register_dataset(
             f"e.g. {missing[:3]} — check the paths in {csv}"
         )
 
-    # canonical manifest next to the csv — data itself stays in place
+    # canonical manifest (paths only) next to the csv — data stays in place
     manifest_path = os.path.join(dataset_dir, "manifest.csv")
     pd.DataFrame(
         {
@@ -327,7 +325,6 @@ def register_dataset(
                 else s["path"]
                 for s in samples
             ],
-            "cancer": [s["label"] for s in samples],
         }
     ).to_csv(manifest_path, index=False)
 
@@ -359,8 +356,6 @@ def register_dataset(
                 "dataset_root": dataset_dir,
                 "source_csv": os.path.basename(csv),
                 "num_samples": len(samples),
-                "num_positive": sum(1 for s in samples if s["label"] == 1),
-                "num_negative": sum(1 for s in samples if s["label"] == 0),
             }
         )
 
