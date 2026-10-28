@@ -177,6 +177,7 @@ class ProvenanceCallback(Callback):
         register_optimizer: bool = True,
         register_scheduler: bool = True,
         split_uris: dict[str, str] | None = None,
+        dataset_run_id: str | None = None,
     ) -> None:
         """Initialise the provenance callback.
 
@@ -194,8 +195,9 @@ class ProvenanceCallback(Callback):
             register_scheduler: Log scheduler config (or True to auto-detect).
             split_uris: Optional mapping of split name to dataset URI, used to
                 reference pre-existing splits instead of recomputing train/test.
-                The dataset is verified against the registration the split
-                run consumed.
+            dataset_run_id: The registration run to verify the dataset
+                against — the pin from the trainer config
+                (``${dataset.run_id}``); wins over the split run's tag.
         """
         self.model_name = model_name or os.environ.get("MODEL_NAME", "model")
         self.experiment_name = experiment_name
@@ -209,6 +211,7 @@ class ProvenanceCallback(Callback):
         self.register_optimizer = register_optimizer
         self.register_scheduler = register_scheduler
         self.split_uris = split_uris
+        self.dataset_run_id = dataset_run_id
 
         # Internal state (populated by on_fit_start or sibling callbacks)
         self._run_id: str | None = None
@@ -365,12 +368,13 @@ class ProvenanceCallback(Callback):
     def _resolve_manifest(self) -> tuple[str | None, str | None, str | None]:
         """Resolve ``(manifest_path, data_root, dataset_run_id)``.
 
-        With ``split_uris``, the registration to verify against comes from
-        the run that produced the splits: its ``dataset_run_id`` tag names
-        the ``Dataset_Registry`` run, whose ``dataset_root`` param says where
-        the data (and its ``manifest.csv``) lives.  Without them, the
-        manifest is auto-detected under ``data/`` and the latest
-        registration is used (``dataset_run_id=None``).
+        The registration to verify against is the explicit ``dataset_run_id``
+        pin (the trainer config's ``${dataset.run_id}``) when given; else, with
+        ``split_uris``, the ``dataset_run_id`` tag of the run that produced
+        the splits.  Either way the registration run's ``dataset_root``
+        param says where the data (and its ``manifest.csv``) lives.
+        Without either, the manifest is auto-detected under ``data/`` and the
+        latest registration is used (``dataset_run_id=None``).
         """
         from rationai.provenance.dataset import detect_manifest
 
@@ -383,12 +387,16 @@ class ProvenanceCallback(Callback):
             data_root = os.path.dirname(os.path.abspath(manifest_path))
 
         dataset_run_id: str | None = None
-        if self.split_uris:
+        if self.dataset_run_id:
+            resolved = self._dataset_from_run_id(self.dataset_run_id)
+        elif self.split_uris:
             resolved = self._dataset_from_split_run()
-            if resolved is not None:
-                chained_manifest, chained_root, dataset_run_id = resolved
-                manifest_path = manifest_path or chained_manifest
-                data_root = data_root or chained_root
+        else:
+            resolved = None
+        if resolved is not None:
+            chained_manifest, chained_root, dataset_run_id = resolved
+            manifest_path = manifest_path or chained_manifest
+            data_root = data_root or chained_root
 
         if manifest_path is None and data_root is not None:
             candidate = os.path.join(data_root, "manifest.csv")
@@ -433,6 +441,15 @@ class ProvenanceCallback(Callback):
                 run_id,
             )
             return None
+        return self._dataset_from_run_id(dataset_run_id)
+
+    def _dataset_from_run_id(self, dataset_run_id: str) -> tuple[str, str, str] | None:
+        """Resolve ``(manifest_path, data_root, dataset_run_id)`` from a registration run id.
+
+        The registration run recorded ``dataset_root`` — from it the manifest
+        to verify is fully determined.  Returns ``None`` (with a warning)
+        when the chain cannot be resolved.
+        """
         try:
             dataset_root = mlflow.get_run(dataset_run_id).data.params.get(
                 "dataset_root"
