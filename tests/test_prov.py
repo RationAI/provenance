@@ -124,3 +124,43 @@ def test_unregistered_user_fails_until_registered(tmp_path, monkeypatch):
     with mlflow.start_run(run_name="step2"):
         result = capture_environment(snapshot_env=False, skip_hardware=True)
     assert result["user_run_id"]
+
+
+def test_env_capture_never_auto_stamps_dataset_run_id(tmp_path, monkeypatch):
+    """dataset_run_id is only ever set explicitly — never via registry lookup.
+
+    A populated Dataset_Registry experiment must not leak into a run's
+    tags: there is no "latest registration" fallback anymore.
+    """
+    import mlflow
+
+    from rationai.provenance.environment import capture_environment
+    from rationai.provenance.user import register_new_user
+
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path}/mlflow.db")
+    monkeypatch.delenv("JOB_USER", raising=False)
+    monkeypatch.setenv("MLFLOW_USER", "ghost")
+
+    mlflow.create_experiment("User_Registry")
+    register_new_user(
+        username="ghost",
+        real_name="Ghost User",
+        email="ghost@example.com",
+        organization="RationAI",
+        lead_name="Lead",
+        lead_email="lead@example.com",
+    )
+
+    # A registration exists in the registry — it must NOT be picked up.
+    mlflow.set_experiment("Dataset_Registry")
+    with mlflow.start_run(run_name="Dataset_other_1.0.0"):
+        mlflow.set_tags({"dataset_name": "other", "version": "1.0.0"})
+
+    mlflow.set_experiment("Default")
+    with mlflow.start_run(run_name="step"):
+        capture_environment(snapshot_env=False, skip_hardware=True)
+        run_id = mlflow.active_run().info.run_id
+
+    tags = mlflow.get_run(run_id).data.tags
+    assert "prov_start_time" in tags  # env tagging did run
+    assert "dataset_run_id" not in tags  # but no auto lookup

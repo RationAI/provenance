@@ -34,8 +34,8 @@ log = logging.getLogger(__name__)
 class DatasetVerificationCallback(Callback):
     """Run dataset verification (and optional train/test split) at training start.
 
-    Auto-detects ``manifest.csv`` under ``data/``, looks up the latest
-    ``Dataset_Registry`` run, and checks that per-file sizes still match.
+    Auto-detects ``manifest.csv`` under ``data/`` and checks that per-file
+    sizes still match the registration run pinned as ``dataset_run_id``.
 
     Stores results on ``self`` so sibling callbacks (e.g. ``ProvenanceCallback``)
     can read them without duplicating work:
@@ -45,6 +45,8 @@ class DatasetVerificationCallback(Callback):
 
     Args:
         manifest_path: Path to manifest.csv (auto-detected if None).
+        dataset_run_id: Registration run to verify against — pinned, never
+            looked up implicitly. Without it, verification is skipped.
         test_size: Fraction of data for the test split. Set to 0 to skip splitting.
         random_state: Random seed for train/test split.
         fail_fast: Abort training if dataset verification fails.
@@ -53,6 +55,7 @@ class DatasetVerificationCallback(Callback):
     def __init__(
         self,
         manifest_path: str | None = None,
+        dataset_run_id: str | None = None,
         test_size: float = 0.0,
         random_state: int = 42,
         fail_fast: bool = True,
@@ -61,11 +64,14 @@ class DatasetVerificationCallback(Callback):
 
         Args:
             manifest_path: Path to manifest.csv (auto-detected if None).
+            dataset_run_id: Registration run to verify against — pinned, never
+                looked up implicitly. Without it, verification is skipped.
             test_size: Fraction of data for the test split. Set to 0 to skip splitting.
             random_state: Random seed for train/test split.
             fail_fast: Abort training if dataset verification fails.
         """
         self._manifest_path = manifest_path
+        self._dataset_run_id = dataset_run_id
         self.test_size = test_size
         self.random_state = random_state
         self.fail_fast = fail_fast
@@ -86,7 +92,7 @@ class DatasetVerificationCallback(Callback):
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Verify the dataset and optionally split into train/test.
 
-        Looks up the latest ``Dataset_Registry`` run, checks file integrity,
+        Verifies file integrity against the pinned ``dataset_run_id``,
         logs verification params to MLflow, and (when ``test_size > 0``)
         performs a stratified train/test split saved as an MLflow artifact.
         """
@@ -96,7 +102,6 @@ class DatasetVerificationCallback(Callback):
 
         from rationai.provenance.dataset import (
             detect_manifest,
-            lookup_dataset_run,
             verify_manifest,
         )
         from rationai.provenance.dataset import (
@@ -118,7 +123,7 @@ class DatasetVerificationCallback(Callback):
             data_root = os.path.dirname(os.path.abspath(manifest_path))
 
         # ── Verification ────────────────────────────────────────
-        dataset_run_id = lookup_dataset_run()
+        dataset_run_id = self._dataset_run_id
         verification = verify_manifest(manifest_path, data_root, dataset_run_id)
         self._verification = verification
 

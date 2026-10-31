@@ -390,10 +390,8 @@ def _detect_all_sections(
 
 
 def _log_env_tags(result: dict[str, Any]) -> None:
-    """Set user/dataset/start-time tags on the active MLflow run."""
+    """Set user/start-time tags on the active MLflow run."""
     import mlflow
-
-    from rationai.provenance.dataset import lookup_dataset_run
 
     env_tags: dict[str, str] = {}
     if result.get("user_run_id"):
@@ -402,10 +400,6 @@ def _log_env_tags(result: dict[str, Any]) -> None:
         for key in ("username", "real_name", "organization"):
             if key in utags:
                 env_tags[key] = utags[key]
-
-    dataset_run_id = lookup_dataset_run()
-    if dataset_run_id:
-        env_tags["dataset_run_id"] = dataset_run_id
 
     env_tags["prov_start_time"] = datetime.now(UTC).isoformat()
     mlflow.set_tags(env_tags)

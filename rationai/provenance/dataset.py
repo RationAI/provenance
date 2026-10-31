@@ -26,26 +26,6 @@ def lookup_experiment(name: str) -> str | None:
     return exp.experiment_id if exp else None
 
 
-def lookup_dataset_run() -> str | None:
-    """Return the latest Dataset_Registry run ID.
-
-    Falls back to the most recent run so that workflows with only one
-    registered dataset still work.
-    """
-    exp_id = lookup_experiment("Dataset_Registry")
-    if exp_id is None:
-        return None
-
-    runs_df = mlflow.search_runs(
-        experiment_ids=[exp_id],
-        order_by=["start_time DESC"],
-    )
-    if pd.DataFrame(runs_df).empty:
-        return None
-
-    return pd.DataFrame(runs_df).iloc[0]["run_id"]
-
-
 def detect_manifest() -> tuple[str | None, str | None]:
     """Walk data/ looking for manifest.csv.
 
@@ -118,10 +98,13 @@ def load_manifest(manifest_path: str, data_root: str) -> list[dict[str, Any]]:
 def verify_dataset(
     manifest_path: str | None = None,
     data_root: str | None = None,
+    dataset_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Public entry point — verify the current dataset against MLflow.
 
-    Auto-detects the manifest if *manifest_path* is not given.
+    Auto-detects the manifest if *manifest_path* is not given.  The
+    registration to verify against is *dataset_run_id* — it is never looked
+    up implicitly; without a pin, verification is skipped.
 
     Returns a dict with keys::
 
@@ -149,7 +132,6 @@ def verify_dataset(
     if data_root is None:
         data_root = os.path.dirname(os.path.abspath(manifest_path))
 
-    dataset_run_id = lookup_dataset_run()
     return verify_manifest(manifest_path, data_root, dataset_run_id)
 
 
@@ -177,7 +159,7 @@ def verify_manifest(
 
     if not dataset_run_id:
         result["details"].append(
-            "No Dataset_Registry run found — skipping verification"
+            "No dataset_run_id pinned — skipping verification"
         )
         return result
 

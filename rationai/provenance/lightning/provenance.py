@@ -475,13 +475,9 @@ class ProvenanceCallback(Callback):
         dataset_run_id: str | None = None,
     ) -> None:
         """Verify the dataset manifest and (legacy) compute a train/test split."""
-        from rationai.provenance.dataset import (
-            lookup_dataset_run,
-            verify_manifest,
-        )
+        from rationai.provenance.dataset import verify_manifest
 
         # ── Verification (always) ────────────────────────────
-        dataset_run_id = dataset_run_id or lookup_dataset_run()
         verification = verify_manifest(manifest_path, data_root, dataset_run_id)
         self._verification = verification or {}
         for detail in verification.get("details", []):
@@ -581,8 +577,6 @@ class ProvenanceCallback(Callback):
         dataset_run_id: str | None = None,
     ) -> None:
         """Set provenance tags (user / dataset run links, start time)."""
-        from rationai.provenance.dataset import lookup_dataset_run
-
         tags: dict[str, str] = {}
         if user_run_id:
             tags["user_run_id"] = user_run_id
@@ -590,7 +584,6 @@ class ProvenanceCallback(Callback):
                 if key in user_tags:
                     tags[key] = user_tags[key]
 
-        dataset_run_id = dataset_run_id or lookup_dataset_run()
         if dataset_run_id:
             tags["dataset_run_id"] = dataset_run_id
 
